@@ -1,0 +1,50 @@
+{
+    "name": "flightphp/apm",
+    "type": "library",
+    "description": "High Performance Application Performance Monitoring (APM) for FlightPHP",
+    "keywords": [
+		"flight",
+		"apm",
+		"php",
+		"simple",
+		"lightweight",
+		"application",
+		"performance",
+		"monitoring",
+		"monitor",
+		"application performance",
+		"performance monitoring",
+		"application performance monitor",
+		"application performance monitoring"
+	],
+    "homepage": "https://docs.flightphp.com",
+    "license": "MIT",
+	"authors": [
+        {
+            "name": "n0nag0n",
+            "email": "n0nag0n@sky-9.com",
+            "role": "Owner"
+        }
+    ],
+    "require": {
+        "php": ">=7.4",
+        "flightphp/core": "^3.15",
+        "flightphp/runway": "^0.2 || ^1.1"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.0",
+        "squizlabs/php_codesniffer": "^3.8",
+        "rregeer/phpunit-coverage-check": "^0.3.1",
+        "n0nag0n/simple-job-queue": "^1.1",
+        "enqueue/redis": "^0.10.19"
+    },
+	"autoload": {
+		"psr-4": {"flight\\": "src/"}
+	},
+	 "scripts": {
+		"test": "phpunit",
+		"test-coverage": "XDEBUG_MODE=coverage vendor/bin/phpunit --coverage-html=coverage --coverage-clover=clover.xml && vendor/bin/coverage-check clover.xml 100",
+		"beautify": "phpcbf --standard=phpcs.xml",
+		"phpcs": "phpcs --standard=phpcs.xml"
+	 }
+}
