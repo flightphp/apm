@@ -37,7 +37,6 @@ $app->route('GET /', function() use ($app) {
 
 $app->route('GET /apm/data/dashboard', function() use  ($app) {
     $range = $app->request()->query['range'] ?? 'last_hour';
-	var_dump($range);
     $threshold = calculateThreshold($range);
     $db = $app->db();
 
