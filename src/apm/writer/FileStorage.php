@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace flight\apm\worker;
+namespace flight\apm\writer;
 
 class FileStorage implements StorageInterface
 {

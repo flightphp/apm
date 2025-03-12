@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace flight\apm\worker;
+namespace flight\apm\writer;
 
 use PDO;
 use PDOException;
@@ -122,11 +122,12 @@ class SqliteStorage implements StorageInterface
                 response_code,
                 response_size,
                 response_build_time
-            ) VALUES (?, datetime(\'now\'), ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ');
         
         $stmt->execute([
             $requestId,
+			gmdate('Y-m-d H:i:s', (int) $metrics['start_time']),
             $metrics['request_method'] ?? null,
             $metrics['request_url'] ?? null,
             $metrics['total_time'] ?? null,
@@ -248,14 +249,12 @@ class SqliteStorage implements StorageInterface
                 ) VALUES (?, ?, ?, ?)
             ');
             
-            foreach ($dbData['connection_data'] as $connData) {
-                $connStmt->execute([
-                    $requestId,
-                    $connData['engine'] ?? null,
-                    $connData['host'] ?? null,
-                    $connData['database'] ?? null
-                ]);
-            }
+			$connStmt->execute([
+				$requestId,
+				$dbData['connection_data']['engine'] ?? null,
+				$dbData['connection_data']['host'] ?? null,
+				$dbData['connection_data']['database'] ?? null
+			]);
         }
         
         // Store query data

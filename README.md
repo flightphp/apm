@@ -1,17 +1,17 @@
 # FlightPHP APM
-[![Latest Stable Version](http://poser.pugx.org/flightphp/session/v)](https://packagist.org/packages/flightphp/session)
-[![License](https://poser.pugx.org/flightphp/session/license)](https://packagist.org/packages/flightphp/session)
-[![PHP Version Require](http://poser.pugx.org/flightphp/session/require/php)](https://packagist.org/packages/flightphp/session)
-[![Dependencies](http://poser.pugx.org/flightphp/session/dependents)](https://packagist.org/packages/flightphp/session)
+[![Latest Stable Version](http://poser.pugx.org/flightphp/apm/v)](https://packagist.org/packages/flightphp/apm)
+[![License](https://poser.pugx.org/flightphp/apm/license)](https://packagist.org/packages/flightphp/apm)
+[![PHP Version Require](http://poser.pugx.org/flightphp/apm/require/php)](https://packagist.org/packages/flightphp/apm)
+[![Dependencies](http://poser.pugx.org/flightphp/apm/dependents)](https://packagist.org/packages/flightphp/apm)
 
-A lightweight, file-based session handler for the Flight framework. It supports non-blocking behavior, optional encryption, and auto-commit functionality. See [basic example](#basic-example).
+An APM (Application Performance Monitoring) library for [FlightPHP](https://github.com/flightphp/core) framework.
 
 ## Installation
 
 Simply install with Composer
 
 ```bash
-composer require flightphp/session
+composer require flightphp/apm
 ```
 
 ## Documentation

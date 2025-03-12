@@ -95,7 +95,7 @@ class Apm
 
         $dispatcher->on('flight.route.executed', function (Route $route, float $executionTime) {
             $this->metrics['routes'][$route->pattern] = [
-                'execution_time' => $executionTime,
+                'execution_time' => round($executionTime, 8),
                 'memory_used' => memory_get_usage() - $this->metrics['start_memory']
             ];
         });
@@ -103,12 +103,12 @@ class Apm
         $dispatcher->on('flight.middleware.executed', function (Route $route, $middleware, float $executionTime) {
             $this->metrics['middleware'][$route->pattern][] = [
                 'middleware' => is_object($middleware) ? get_class($middleware) : (string)$middleware,
-                'execution_time' => $executionTime
+                'execution_time' => round($executionTime, 8)
             ];
         });
 
         $dispatcher->on('flight.view.rendered', function (string $file, float $renderTime) {
-            $this->metrics['views'][$file] = ['render_time' => $renderTime];
+            $this->metrics['views'][$file] = ['render_time' => round($renderTime, 8)];
         });
 
         $dispatcher->on('flight.db.queries', function (array $connectionMetrics, array $queryMetrics) {
@@ -138,11 +138,11 @@ class Apm
 		// because this is the final call in the request lifecycle
         $dispatcher->on('flight.response.sent', function (Response $response, float $executionTime) {
             $endTime = microtime(true);
-            $this->metrics['total_time'] = $endTime - $this->metrics['start_time'];
+            $this->metrics['total_time'] = round($endTime - $this->metrics['start_time'], 8);
             $this->metrics['peak_memory'] = memory_get_peak_usage();
 			$this->metrics['response_code'] = $response->status();
 			$this->metrics['response_size'] = strlen($response->getBody());
-			$this->metrics['response_build_time'] = $executionTime;
+			$this->metrics['response_build_time'] = round($executionTime, 8);
 
 			// sampleRate allows you to scale back the number of metrics sent to the logger
 			// to avoid overwhelming the logging system. A value of 1.0 means 100% of requests
