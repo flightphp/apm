@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace flight;
 
 use flight\apm\CustomEvent;
-use flight\apm\logger\ApmLoggerInterface;
 use flight\apm\logger\LoggerInterface;
 use flight\Engine;
 use flight\net\Request;
@@ -17,11 +16,6 @@ use flight\database\PdoWrapper;
 
 class Apm
 {
-	/**
-	 * @var Engine $app The application engine instance.
-	 */
-    protected Engine $app;
-
 	/**
 	 * @var LoggerInterface $logger An instance of the ApmLogger used for logging APM (Application Performance Monitoring) data.
 	 */
@@ -45,16 +39,13 @@ class Apm
 	/**
 	 * Apm constructor.
 	 *
-	 * @param Engine $app The application engine instance.
 	 * @param LoggerInterface $logger The APM logger instance.
 	 * @param float $sampleRate The sample rate for APM logging, default is 1.0.
 	 */
-    public function __construct(Engine $app, LoggerInterface $logger, float $sampleRate = 1.0)
+    public function __construct(LoggerInterface $logger, float $sampleRate = 1.0)
     {
-        $this->app = $app;
         $this->logger = $logger;
         $this->sampleRate = $sampleRate;
-        $this->registerEvents();
     }
 
 	/**
@@ -62,10 +53,12 @@ class Apm
 	 *
 	 * This method sets up the necessary event listeners and handlers to monitor
 	 * the application's performance metrics.
+	 * 
+	 * @param Engine $app The Flight application instance.
 	 *
 	 * @return void
 	 */
-    protected function registerEvents(): void
+    public function bindEventsToFlightInstance(Engine $app): void
     {
 		// Set defaults
 		$this->metrics['start_time'] = 0.0;
@@ -85,7 +78,7 @@ class Apm
 		$this->metrics['cache'] = [];
 		$this->metrics['custom'] = [];
 
-        $dispatcher = $this->app->eventDispatcher();
+        $dispatcher = $app->eventDispatcher();
 
         $dispatcher->on('flight.request.received', function (Request $request) {
             $this->metrics['start_time'] = microtime(true);
