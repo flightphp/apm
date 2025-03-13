@@ -6,6 +6,7 @@ namespace flight;
 
 use flight\apm\CustomEvent;
 use flight\apm\logger\ApmLoggerInterface;
+use flight\apm\logger\LoggerInterface;
 use flight\Engine;
 use flight\net\Request;
 use flight\net\Response;
@@ -22,9 +23,9 @@ class Apm
     protected Engine $app;
 
 	/**
-	 * @var ApmLoggerInterface $logger An instance of the ApmLogger used for logging APM (Application Performance Monitoring) data.
+	 * @var LoggerInterface $logger An instance of the ApmLogger used for logging APM (Application Performance Monitoring) data.
 	 */
-    protected ApmLoggerInterface $logger;
+    protected LoggerInterface $logger;
 
 	/**
 	 * @var array<int, PdoWrapper> $pdoConnections An array to store PDO connections for logging database queries.
@@ -45,10 +46,10 @@ class Apm
 	 * Apm constructor.
 	 *
 	 * @param Engine $app The application engine instance.
-	 * @param ApmLoggerInterface $logger The APM logger instance.
+	 * @param LoggerInterface $logger The APM logger instance.
 	 * @param float $sampleRate The sample rate for APM logging, default is 1.0.
 	 */
-    public function __construct(Engine $app, ApmLoggerInterface $logger, float $sampleRate = 1.0)
+    public function __construct(Engine $app, LoggerInterface $logger, float $sampleRate = 1.0)
     {
         $this->app = $app;
         $this->logger = $logger;
