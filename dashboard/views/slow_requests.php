@@ -28,6 +28,15 @@
             --badge-primary: #6ea8fe;
         }
 
+		[data-theme="dark"] .table th,
+		[data-theme="dark"] .table td {
+			color: var(--text-color);
+		}
+
+		[data-theme="dark"] .badge {
+			color: #fff; /* Ensure badge text is always white for readability */
+		}
+
         body {
             background-color: var(--bg-color);
             color: var(--text-color);

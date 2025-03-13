@@ -36,6 +36,53 @@
             --badge-warning: #ffca2c;
         }
 
+		[data-theme="dark"] .card-header {
+			color: var(--text-color);
+		}
+
+		[data-theme="dark"] .list-group-item {
+			color: var(--text-color);
+		}
+
+		[data-theme="dark"] .card-body {
+			color: var(--text-color);
+		}
+
+		[data-theme="dark"] .badge {
+			color: #fff; /* Ensure badge text is always white for readability */
+		}
+
+		[data-theme="dark"] .table {
+			background-color: var(--card-bg); /* Match the card background */
+			color: var(--text-color);
+		}
+
+		[data-theme="dark"] .table thead th {
+			background-color: var(--header-bg); /* Match the header background */
+			color: var(--text-color);
+			border-bottom: 2px solid #495057; /* Slightly lighter border for contrast */
+		}
+
+		[data-theme="dark"] .table tbody tr {
+			background-color: var(--card-bg);
+			border-bottom: 1px solid #495057; /* Subtle border between rows */
+		}
+
+		[data-theme="dark"] .table-hover tbody tr:hover {
+			background-color: rgba(255, 255, 255, 0.1); /* Keep the hover effect */
+		}
+
+		[data-theme="dark"] .form-control {
+			background-color: #495057;
+			color: var(--text-color);
+			border-color: #6c757d;
+		}
+
+		[data-theme="dark"] .form-control::placeholder {
+			color: #ced4da; /* Lighter gray for better visibility */
+			opacity: 1; /* Ensure full opacity for readability */
+		}
+
         body {
             background-color: var(--bg-color);
             color: var(--text-color);
@@ -109,6 +156,47 @@
         </div>
 
         <div class="row g-4">
+
+			<!-- Request Log Section -->
+			<div class="col-12 mt-4">
+				<div class="card">
+					<div class="card-header d-flex align-items-center">
+						<i class="bi bi-list me-2" style="color: var(--badge-primary)"></i> Request Log
+					</div>
+					<div class="card-body">
+						<div class="mb-3">
+							<input type="text" id="request-search" class="form-control" placeholder="Search by URL or Response Code...">
+						</div>
+						<div class="table-responsive">
+							<table class="table table-hover">
+								<thead>
+									<tr>
+										<th>Timestamp</th>
+										<th>Request URL</th>
+										<th>Total Time (ms)</th>
+										<th>Response Code</th>
+										<th>Details</th>
+									</tr>
+								</thead>
+								<tbody id="request-log">
+								</tbody>
+							</table>
+						</div>
+						<div class="d-flex justify-content-between align-items-center mt-3">
+							<div>
+								<span id="pagination-info"></span>
+							</div>
+							<nav>
+								<ul class="pagination mb-0">
+									<li class="page-item" id="prev-page"><a class="page-link" href="#">Previous</a></li>
+									<li class="page-item" id="next-page"><a class="page-link" href="#">Next</a></li>
+								</ul>
+							</nav>
+						</div>
+					</div>
+				</div>
+			</div>
+
             <!-- Slowest Requests -->
             <div class="col-md-6 col-lg-4">
                 <div class="card">
@@ -140,6 +228,40 @@
                     </div>
                     <div class="card-body">
                         <h5 class="text-center" id="error-rate"></h5>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Response Code Distribution -->
+            <div class="col-md-12 col-lg-12">
+                <div class="card">
+                    <div class="card-header d-flex align-items-center">
+                        <i class="bi bi-pie-chart me-2" style="color: var(--badge-primary)"></i> Response Code Distribution
+                    </div>
+                    <div class="card-body">
+                        <canvas id="responseCodeChart" height="150"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slowest Middleware -->
+            <div class="col-md-6 col-lg-6">
+                <div class="card">
+                    <div class="card-header d-flex align-items-center">
+                        <i class="bi bi-shield me-2" style="color: var(--badge-primary)"></i> Top 5 Slowest Middleware
+                    </div>
+                    <ul class="list-group list-group-flush" id="slow-middleware"></ul>
+                </div>
+            </div>
+
+            <!-- Cache Hit/Miss Rate -->
+            <div class="col-md-6 col-lg-6">
+                <div class="card">
+                    <div class="card-header d-flex align-items-center">
+                        <i class="bi bi-hdd me-2" style="color: var(--badge-primary)"></i> Cache Hit/Miss Rate
+                    </div>
+                    <div class="card-body">
+                        <h5 class="text-center" id="cache-hit-rate"></h5>
                     </div>
                 </div>
             </div>
@@ -184,6 +306,10 @@
         const rangeSelector = document.getElementById('range');
         const themeToggle = document.getElementById('theme-toggle');
         let isDarkMode = localStorage.getItem('darkMode') === 'true';
+		let currentPage = 1;
+		let totalPages = 1;
+		let perPage = 50;
+		let searchTerm = '';
 
         // Apply stored theme or default to light
         if (isDarkMode) {
@@ -202,92 +328,288 @@
         rangeSelector.addEventListener('change', loadData);
         loadData();
 
-        function loadData() {
-            const range = rangeSelector.value;
-            fetch(`/apm/data/dashboard?range=${range}`)
-                .then(response => {
-                    if (!response.ok) throw new Error('Network response was not ok');
-                    return response.json();
-                })
-                .then(data => {
-                    console.log('Data received:', data);
-                    populateWidgets(data);
-                    drawChart(data.chartData);
-                    document.getElementById('slow-requests-link').href = `/apm/slow-requests?range=${range}`;
-                })
-                .catch(error => console.error('Error loading data:', error));
-        }
+		function loadData() {
+			const range = rangeSelector.value;
+			fetch(`/apm/data/dashboard?range=${range}&page=${currentPage}&search=${encodeURIComponent(searchTerm)}`)
+				.then(response => {
+					if (!response.ok) throw new Error('Network response was not ok');
+					return response.json();
+				})
+				.then(data => {
+					console.log('Data received:', data);
+					populateWidgets(data);
+					drawCharts(data);
+					document.getElementById('slow-requests-link').href = `/apm/slow-requests?range=${range}`;
+					updatePagination(data.pagination);
+				})
+				.catch(error => console.error('Error loading data:', error));
+		}
 
         function populateWidgets(data) {
-            const slowRequests = document.getElementById('slow-requests');
-            slowRequests.innerHTML = data.slowRequests.map(r => {
-                const time = parseFloat(r.total_time) * 1000;
-                return `<li class="list-group-item d-flex justify-content-between align-items-center">
-                    ${r.request_url}
-                    <span class="badge bg-primary rounded-pill">${time.toFixed(3)} ms</span>
-                </li>`;
-            }).join('');
+			const slowRequests = document.getElementById('slow-requests');
+			slowRequests.innerHTML = data.slowRequests.map(r => {
+				const time = parseFloat(r.total_time) * 1000;
+				return `<li class="list-group-item d-flex justify-content-between align-items-center">
+					${r.request_url}
+					<span class="badge bg-primary rounded-pill">${time.toFixed(3)} ms</span>
+				</li>`;
+			}).join('');
 
-            const slowRoutes = document.getElementById('slow-routes');
-            slowRoutes.innerHTML = data.slowRoutes.map(r => {
-                const time = parseFloat(r.avg_time) * 1000;
-                return `<li class="list-group-item d-flex justify-content-between align-items-center">
-                    ${r.route_pattern}
-                    <span class="badge bg-info rounded-pill">${time.toFixed(3)} ms</span>
-                </li>`;
-            }).join('');
+			const slowRoutes = document.getElementById('slow-routes');
+			slowRoutes.innerHTML = data.slowRoutes.map(r => {
+				const time = parseFloat(r.avg_time) * 1000;
+				return `<li class="list-group-item d-flex justify-content-between align-items-center">
+					${r.route_pattern}
+					<span class="badge bg-info rounded-pill">${time.toFixed(3)} ms</span>
+				</li>`;
+			}).join('');
 
-            document.getElementById('error-rate').textContent = `${(data.errorRate * 100).toFixed(2)}%`;
+			document.getElementById('error-rate').textContent = `${(data.errorRate * 100).toFixed(2)}%`;
 
-            const longQueries = document.getElementById('long-queries');
-            longQueries.innerHTML = data.longQueries.map(q => {
-                const time = parseFloat(q.execution_time) * 1000;
-                const queryText = q.query.length > 50 ? q.query.substring(0, 50) + '...' : q.query;
-                return `<li class="list-group-item d-flex justify-content-between align-items-center">
-                    ${queryText}
-                    <span class="badge bg-warning rounded-pill">${time.toFixed(3)} ms</span>
-                </li>`;
-            }).join('');
+			const longQueries = document.getElementById('long-queries');
+			longQueries.innerHTML = data.longQueries.map(q => {
+				const time = parseFloat(q.execution_time) * 1000;
+				const queryText = q.query.length > 50 ? q.query.substring(0, 50) + '...' : q.query;
+				return `<li class="list-group-item d-flex justify-content-between align-items-center">
+					${queryText}
+					<span class="badge bg-warning rounded-pill">${time.toFixed(3)} ms</span>
+				</li>`;
+			}).join('');
 
-            document.getElementById('p95').textContent = (data.p95 * 1000).toFixed(3);
-            document.getElementById('p99').textContent = (data.p99 * 1000).toFixed(3);
-        }
+			const slowMiddleware = document.getElementById('slow-middleware');
+			slowMiddleware.innerHTML = data.slowMiddleware.map(m => {
+				const time = parseFloat(m.execution_time) * 1000;
+				return `<li class="list-group-item d-flex justify-content-between align-items-center">
+					${m.middleware_name}
+					<span class="badge bg-primary rounded-pill">${time.toFixed(3)} ms</span>
+				</li>`;
+			}).join('');
 
-        let chart;
-        function drawChart(chartData) {
-            const ctx = document.getElementById('latencyChart').getContext('2d');
-            if (chart) chart.destroy();
-            chart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: chartData.map(d => d.timestamp),
-                    datasets: [{
-                        label: 'Average Latency (ms)',
-                        data: chartData.map(d => d.average_time * 1000),
-                        borderColor: '#0d6efd',
-                        backgroundColor: 'rgba(13, 110, 253, 0.1)',
-                        fill: true,
-                        tension: 0.4,
-                    }]
-                },
-                options: {
-                    scales: {
-                        x: { title: { display: true, text: 'Time' } },
-                        y: { 
-                            title: { display: true, text: 'Latency (ms)' }, 
-                            beginAtZero: true,
-                            suggestedMax: 1
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top',
-                        }
-                    }
-                }
-            });
-        }
+			document.getElementById('cache-hit-rate').textContent = `${(data.cacheHitRate * 100).toFixed(2)}% Hits`;
+
+			document.getElementById('p95').textContent = (data.p95 * 1000).toFixed(3);
+			document.getElementById('p99').textContent = (data.p99 * 1000).toFixed(3);
+
+			// Populate Request Log
+			const requestLog = document.getElementById('request-log');
+			requestLog.innerHTML = data.requests.map((r, index) => {
+				const time = parseFloat(r.total_time) * 1000;
+				return `
+					<tr>
+						<td>${r.timestamp}</td>
+						<td>${r.request_url}</td>
+						<td>${time.toFixed(3)} ms</td>
+						<td>${r.response_code}</td>
+						<td>
+							<button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#request-details-${index}" aria-expanded="false" aria-controls="request-details-${index}">
+								Details
+							</button>
+							<div class="collapse mt-2" id="request-details-${index}">
+								<div class="card card-body">
+									<h6>Middleware</h6>
+									<ul>
+										${r.middleware ? r.middleware.map(m => `<li>${m.middleware_name}: ${(parseFloat(m.execution_time) * 1000).toFixed(3)} ms</li>`).join('') : '<li>No middleware data</li>'}
+									</ul>
+									<h6>Database Queries</h6>
+									<ul>
+										${r.queries ? r.queries.map(q => `<li>${q.query}: ${(parseFloat(q.execution_time) * 1000).toFixed(3)} ms (Rows: ${q.row_count})</li>`).join('') : '<li>No query data</li>'}
+									</ul>
+									<h6>Errors</h6>
+									<ul>
+										${r.errors ? r.errors.map(e => `<li>${e.error_message} (Code: ${e.error_code})</li>`).join('') : '<li>No errors</li>'}
+									</ul>
+									<h6>Cache Operations</h6>
+									<ul>
+										${r.cache ? r.cache.map(c => `<li>${c.cache_key} (${c.cache_operation}): ${c.hit ? 'Hit' : 'Miss'} - ${(parseFloat(c.execution_time) * 1000).toFixed(3)} ms</li>`).join('') : '<li>No cache data</li>'}
+									</ul>
+								</div>
+							</div>
+						</td>
+					</tr>
+				`;
+			}).join('');
+
+			// Add search functionality
+			const searchInput = document.getElementById('request-search');
+			searchInput.addEventListener('input', () => {
+				searchTerm = searchInput.value;
+				currentPage = 1; // Reset to first page on search
+				loadData();
+			});
+		}
+
+		function updatePagination(pagination) {
+			currentPage = pagination.currentPage;
+			totalPages = pagination.totalPages;
+			perPage = pagination.perPage;
+
+			// Update pagination info
+			const start = (currentPage - 1) * perPage + 1;
+			const end = Math.min(currentPage * perPage, pagination.totalRequests);
+			document.getElementById('pagination-info').textContent = `Showing ${start} to ${end} of ${pagination.totalRequests} requests`;
+
+			// Update pagination buttons
+			const prevPage = document.getElementById('prev-page');
+			const nextPage = document.getElementById('next-page');
+			prevPage.classList.toggle('disabled', currentPage === 1);
+			nextPage.classList.toggle('disabled', currentPage === totalPages);
+
+			prevPage.onclick = () => {
+				if (currentPage > 1) {
+					currentPage--;
+					loadData();
+				}
+				return false;
+			};
+
+			nextPage.onclick = () => {
+				if (currentPage < totalPages) {
+					currentPage++;
+					loadData();
+				}
+				return false;
+			};
+		}
+
+		function filterRequests(requests) {
+			const searchInput = document.getElementById('request-search');
+			const searchTerm = searchInput.value.toLowerCase();
+			const requestLog = document.getElementById('request-log');
+			
+			const filteredRequests = requests.filter(r => 
+				r.request_url.toLowerCase().includes(searchTerm) || 
+				r.response_code.toString().includes(searchTerm)
+			);
+
+			requestLog.innerHTML = filteredRequests.map((r, index) => {
+				const time = parseFloat(r.total_time) * 1000;
+				return `
+					<tr>
+						<td>${r.timestamp}</td>
+						<td>${r.request_url}</td>
+						<td>${time.toFixed(3)} ms</td>
+						<td>${r.response_code}</td>
+						<td>
+							<button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#request-details-${index}" aria-expanded="false" aria-controls="request-details-${index}">
+								Details
+							</button>
+							<div class="collapse mt-2" id="request-details-${index}">
+								<div class="card card-body">
+									<h6>Middleware</h6>
+									<ul>
+										${r.middleware ? r.middleware.map(m => `<li>${m.middleware_name}: ${(parseFloat(m.execution_time) * 1000).toFixed(3)} ms</li>`).join('') : '<li>No middleware data</li>'}
+									</ul>
+									<h6>Database Queries</h6>
+									<ul>
+										${r.queries ? r.queries.map(q => `<li>${q.query}: ${(parseFloat(q.execution_time) * 1000).toFixed(3)} ms (Rows: ${q.row_count})</li>`).join('') : '<li>No query data</li>'}
+									</ul>
+									<h6>Errors</h6>
+									<ul>
+										${r.errors ? r.errors.map(e => `<li>${e.error_message} (Code: ${e.error_code})</li>`).join('') : '<li>No errors</li>'}
+									</ul>
+									<h6>Cache Operations</h6>
+									<ul>
+										${r.cache ? r.cache.map(c => `<li>${c.cache_key} (${c.cache_operation}): ${c.hit ? 'Hit' : 'Miss'} - ${(parseFloat(c.execution_time) * 1000).toFixed(3)} ms</li>`).join('') : '<li>No cache data</li>'}
+									</ul>
+								</div>
+							</div>
+						</td>
+					</tr>
+				`;
+			}).join('');
+		}
+
+        let latencyChart, responseCodeChart;
+		function drawCharts(data) {
+			// Latency Chart
+			const ctxLatency = document.getElementById('latencyChart').getContext('2d');
+			if (latencyChart) latencyChart.destroy();
+			latencyChart = new Chart(ctxLatency, {
+				type: 'line',
+				data: {
+					labels: data.chartData.map(d => d.timestamp),
+					datasets: [{
+						label: 'Average Latency (ms)',
+						data: data.chartData.map(d => d.average_time * 1000),
+						borderColor: '#0d6efd',
+						backgroundColor: 'rgba(13, 110, 253, 0.1)',
+						fill: true,
+						tension: 0.4,
+					}]
+				},
+				options: {
+					scales: {
+						x: { title: { display: true, text: 'Time' } },
+						y: { 
+							title: { display: true, text: 'Latency (ms)' }, 
+							beginAtZero: true,
+							suggestedMax: 1
+						}
+					},
+					plugins: {
+						legend: {
+							display: true,
+							position: 'top',
+						}
+					}
+				}
+			});
+
+			// Response Code Distribution Over Time (Stacked Bar Chart)
+			const ctxResponse = document.getElementById('responseCodeChart').getContext('2d');
+			if (responseCodeChart) responseCodeChart.destroy();
+
+			// Extract all unique response codes
+			const responseCodes = [...new Set(data.responseCodeOverTime.flatMap(d => Object.keys(d).filter(k => k !== 'timestamp')))];
+			
+			// Create datasets for each response code
+			const datasets = responseCodes.map(code => {
+				// Determine color based on response code
+				let color;
+				if (code >= 500 && code <= 599) {
+					color = '#dc3545'; // Red for 5xx errors
+				} else if (code >= 400 && code <= 499) {
+					color = '#ffc107'; // Yellow for 4xx errors
+				} else if (code >= 300 && code <= 399) {
+					color = '#0dcaf0'; // Cyan for 3xx redirects
+				} else {
+					color = '#198754'; // Green for 2xx success
+				}
+
+				return {
+					label: `Code ${code}`,
+					data: data.responseCodeOverTime.map(d => d[code] || 0),
+					backgroundColor: color,
+					borderWidth: 1,
+				};
+			});
+
+			responseCodeChart = new Chart(ctxResponse, {
+				type: 'bar',
+				data: {
+					labels: data.responseCodeOverTime.map(d => d.timestamp),
+					datasets: datasets
+				},
+				options: {
+					scales: {
+						x: { 
+							title: { display: true, text: 'Time' },
+							stacked: true,
+						},
+						y: { 
+							title: { display: true, text: 'Request Count' },
+							beginAtZero: true,
+							stacked: true,
+						}
+					},
+					plugins: {
+						legend: {
+							position: 'bottom',
+						}
+					}
+				}
+			});
+		}
     </script>
 </body>
 </html>

@@ -1,10 +1,30 @@
 <?php
 
-require __DIR__.'/../vendor/autoload.php';
+// since this is a composer package, we need to find the correct autoload.php file
+// from some various locations
+$paths = [
+	__DIR__.'/../autoload.php',
+	__DIR__.'/../../autoload.php',
+	__DIR__.'/../../../autoload.php',
+];
+$finalPath = '';
+foreach ($paths as $path) {
+	if (file_exists($path) === true) {
+		$finalPath = $path;
+		require $path;
+		break;
+	}
+}
+if (empty($finalPath)) {
+	throw new Exception('Could not find autoload.php');
+}
+
+$appRootPath = dirname($finalPath).'/../';
+
 
 $app = Flight::app();
 $app->set('flight.views.path', __DIR__.'/views');
-$runway_config = json_decode(file_get_contents(__DIR__.'/../.runway-config.json'), true);
+$runway_config = json_decode(file_get_contents($appRootPath.'/.runway-config.json'), true);
 
 $app->register('db', 'PDO', [$runway_config['apm']['dest_db_dsn'], null, null, [
 	PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
@@ -35,8 +55,12 @@ $app->route('GET /', function() use ($app) {
     $app->render('dashboard');
 });
 
-$app->route('GET /apm/data/dashboard', function() use  ($app) {
-    $range = $app->request()->query['range'] ?? 'last_hour';
+$app->route('GET /apm/data/dashboard', function() use ($app) {
+    $range = Flight::request()->query['range'] ?? 'last_hour';
+    $page = max(1, (int) (Flight::request()->query['page'] ?? 1)); // Default to page 1
+    $perPage = 50; // Number of requests per page
+    $search = Flight::request()->query['search'] ?? ''; // Search term
+    $offset = ($page - 1) * $perPage;
     $threshold = calculateThreshold($range);
     $db = $app->db();
 
@@ -63,6 +87,101 @@ $app->route('GET /apm/data/dashboard', function() use  ($app) {
     $stmt = $db->prepare('SELECT query, execution_time FROM apm_db_queries WHERE request_id IN (SELECT request_id FROM apm_requests WHERE timestamp >= ?) ORDER BY execution_time DESC LIMIT 5');
     $stmt->execute([$threshold]);
     $longQueries = $stmt->fetchAll();
+
+    // Slowest Middleware
+    $stmt = $db->prepare('SELECT middleware_name, AVG(execution_time) as execution_time FROM apm_middleware WHERE request_id IN (SELECT request_id FROM apm_requests WHERE timestamp >= ?) GROUP BY middleware_name ORDER BY execution_time DESC LIMIT 5');
+    $stmt->execute([$threshold]);
+    $slowMiddleware = $stmt->fetchAll();
+
+    // Cache Hit/Miss Rate
+    $stmt = $db->prepare('SELECT hit, COUNT(*) as count FROM apm_cache WHERE request_id IN (SELECT request_id FROM apm_requests WHERE timestamp >= ?) GROUP BY hit');
+    $stmt->execute([$threshold]);
+    $cacheData = $stmt->fetchAll();
+    $totalCacheOps = array_sum(array_column($cacheData, 'count'));
+    $hits = array_filter($cacheData, fn($row) => $row['hit'] == 1);
+    $hitCount = $hits ? $hits[0]['count'] : 0;
+    $cacheHitRate = $totalCacheOps > 0 ? $hitCount / $totalCacheOps : 0;
+
+    // Response Code Distribution Over Time
+	$stmt = $db->prepare('SELECT timestamp, response_code FROM apm_requests WHERE timestamp >= ? ORDER BY timestamp');
+	$stmt->execute([$threshold]);
+	$requestData = $stmt->fetchAll();
+	$responseCodeData = [];
+	$interval = 300; // 5 minutes
+	foreach ($requestData as $row) {
+		$timestamp = strtotime($row['timestamp']);
+		$bucket = floor($timestamp / $interval) * $interval;
+		$code = $row['response_code'];
+		if (!isset($responseCodeData[$bucket])) {
+			$responseCodeData[$bucket] = [];
+		}
+		if (!isset($responseCodeData[$bucket][$code])) {
+			$responseCodeData[$bucket][$code] = 0;
+		}
+		$responseCodeData[$bucket][$code]++;
+	}
+	$responseCodeOverTime = [];
+	$allCodes = array_unique(array_column($requestData, 'response_code'));
+	foreach ($responseCodeData as $bucket => $codes) {
+		$entry = ['timestamp' => date('Y-m-d H:i:s', $bucket)];
+		foreach ($allCodes as $code) {
+			$entry[$code] = $codes[$code] ?? 0;
+		}
+		$responseCodeOverTime[] = $entry;
+	}
+
+	// Count total requests for pagination (with search)
+    $countQuery = 'SELECT COUNT(*) FROM apm_requests WHERE timestamp >= ?';
+    $countParams = [$threshold];
+    if ($search) {
+        $countQuery .= ' AND (request_url LIKE ? OR response_code LIKE ?)';
+        $countParams[] = "%$search%";
+        $countParams[] = "%$search%";
+    }
+    $stmt = $db->prepare($countQuery);
+    $stmt->execute($countParams);
+    $totalRequests = $stmt->fetchColumn();
+    $totalPages = max(1, ceil($totalRequests / $perPage));
+
+    // Paginated Requests with Search
+    $query = 'SELECT request_id, timestamp, request_url, total_time, response_code FROM apm_requests WHERE timestamp >= ?';
+    $params = [$threshold];
+    if ($search) {
+        $query .= ' AND (request_url LIKE ? OR response_code LIKE ?)';
+        $params[] = "%$search%";
+        $params[] = "%$search%";
+    }
+    $query .= ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
+    $params[] = $perPage;
+    $params[] = $offset;
+    $stmt = $db->prepare($query);
+    $stmt->execute($params);
+    $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($requests as &$request) {
+        $requestId = $request['request_id'];
+
+        // Middleware
+        $stmt = $db->prepare('SELECT middleware_name, execution_time FROM apm_middleware WHERE request_id = ?');
+        $stmt->execute([$requestId]);
+        $request['middleware'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Database Queries
+        $stmt = $db->prepare('SELECT query, execution_time, row_count FROM apm_db_queries WHERE request_id = ?');
+        $stmt->execute([$requestId]);
+        $request['queries'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Errors
+        $stmt = $db->prepare('SELECT error_message, error_code FROM apm_errors WHERE request_id = ?');
+        $stmt->execute([$requestId]);
+        $request['errors'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Cache Operations
+        $stmt = $db->prepare('SELECT cache_key, cache_operation, hit, execution_time FROM apm_cache WHERE request_id = ?');
+        $stmt->execute([$requestId]);
+        $request['cache'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+    unset($request);
 
     // Latency Percentiles
     $stmt = $db->prepare('SELECT total_time FROM apm_requests WHERE timestamp >= ? ORDER BY total_time');
@@ -98,6 +217,16 @@ $app->route('GET /apm/data/dashboard', function() use  ($app) {
         'slowRoutes' => $slowRoutes,
         'errorRate' => $errorRate,
         'longQueries' => $longQueries,
+        'slowMiddleware' => $slowMiddleware,
+        'cacheHitRate' => $cacheHitRate,
+        'responseCodeOverTime' => $responseCodeOverTime,
+		'requests' => $requests,
+        'pagination' => [
+            'currentPage' => $page,
+            'totalPages' => $totalPages,
+            'perPage' => $perPage,
+            'totalRequests' => $totalRequests,
+        ],
         'p95' => $p95,
         'p99' => $p99,
         'chartData' => $chartData,
