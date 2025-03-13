@@ -12,7 +12,7 @@ use PDOException;
  *
  * Handles storing application performance metrics in a database table
  */
-abstract class DatabaseApmLoggerAbstract
+abstract class DatabaseLoggerAbstract
 {
     /**
      * PDO database connection instance

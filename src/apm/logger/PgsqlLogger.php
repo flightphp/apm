@@ -6,7 +6,7 @@ namespace flight\apm\logger;
 
 use PDOException;
 
-class PgsqlApmLogger extends DatabaseApmLoggerAbstract implements ApmLoggerInterface {
+class PgsqlApmLogger extends DatabaseLoggerAbstract implements LoggerInterface {
 
     protected function ensureTableExists(): void
 	{

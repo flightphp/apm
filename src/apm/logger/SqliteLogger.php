@@ -6,8 +6,11 @@ namespace flight\apm\logger;
 
 use PDOException;
 
-class MysqlApmLogger extends DatabaseApmLoggerAbstract implements ApmLoggerInterface {
+class SqliteLogger extends DatabaseLoggerAbstract implements LoggerInterface {
 
+	/**
+	 * @inheritDoc
+	 */
     protected function ensureTableExists(): void
 	{
         if ($this->tableCreated) {
@@ -17,12 +20,12 @@ class MysqlApmLogger extends DatabaseApmLoggerAbstract implements ApmLoggerInter
         try {
             $this->pdo->exec("
                 CREATE TABLE IF NOT EXISTS apm_metrics_log (
-                    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     added_dt DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    metrics_json TEXT NOT NULL,
-                    INDEX idx_added_dt (added_dt)
-                ) ENGINE=InnoDB
+                    metrics_json TEXT NOT NULL
+                )
             ");
+			$this->pdo->exec("CREATE INDEX IF NOT EXISTS idx_added_dt ON apm_metrics_log (added_dt)");
             $this->tableCreated = true;
         } catch (PDOException $e) {
             error_log("Failed to create apm_metrics_log table: " . $e->getMessage());

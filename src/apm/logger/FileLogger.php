@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace flight\apm\logger;
 
-class FileApmLogger implements ApmLoggerInterface
+class FileLogger implements LoggerInterface
 {
     private string $filePath;
 
