@@ -62,7 +62,7 @@ class WorkerCommand extends AbstractBaseWorkerCommand
      */
     public function __construct(array $config)
     {
-        parent::__construct('apm-worker', 'Starts a worker to migrate APM metrics from source to destination storage.', $config);
+        parent::__construct('apm:worker', 'Starts a worker to migrate APM metrics from source to destination storage.', $config);
 
         // Processing options
         $this->option('--timeout timeout', 'Timeout in seconds for processing (0 = wait forever)');
