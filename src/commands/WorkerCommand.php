@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace flight\commands;
 
+use Ahc\Cli\IO\Interactor;
 use flight\apm\AbstractBaseWorkerCommand;
 use flight\apm\reader\ReaderInterface;
 use flight\apm\reader\SqliteReader;
@@ -70,9 +71,19 @@ class WorkerCommand extends AbstractBaseWorkerCommand
         $this->option('--daemon', 'Run in daemon mode (continuous processing)');
         $this->option('--batch_size batch_size', 'Number of messages to process per batch');
 
-        // Initialize configuration
-        $this->registerStorageWorkerOptions();
     }
+	
+	/**
+	 * Interact with the user to gather configuration options
+	 *
+	 * @param Interactor $io The IO instance for user interaction
+	 * @return void
+	 */
+	public function interact(Interactor $io)
+	{
+		// Initialize configuration
+		$this->registerStorageWorkerOptions();
+	}
 
     /**
      * Executes the worker command
