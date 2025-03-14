@@ -158,7 +158,7 @@ class WorkerCommand extends AbstractBaseWorkerCommand
                     
                     $processedIds = [];
                     foreach ($metrics as $metric) {
-                        $io->write("Processing metric ID {$metric['id']}: ");
+                        //$io->write("Processing metric ID {$metric['id']}: ", true);
                         
                         try {
                             // Convert JSON string to array if needed
