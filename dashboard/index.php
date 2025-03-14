@@ -3,7 +3,7 @@
 // since this is a composer package, we need to find the correct autoload.php file
 // from some various locations
 
-use Flight\Apm\Presenter\PresenterFactory;
+use flight\apm\presenter\PresenterFactory;
 
 $paths = [
 	__DIR__.'/../vendor/autoload.php',
