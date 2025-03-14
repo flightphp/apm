@@ -1,8 +1,7 @@
 <?php
 
-namespace Flight\Apm\Presenter;
+namespace flight\apm\presenter;
 
-use PDO;
 use InvalidArgumentException;
 
 class PresenterFactory

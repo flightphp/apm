@@ -1,6 +1,6 @@
 <?php
 
-namespace Flight\Apm\Presenter;
+namespace flight\apm\presenter;
 
 interface PresenterInterface
 {

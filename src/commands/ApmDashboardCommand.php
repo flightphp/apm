@@ -42,12 +42,6 @@ class ApmDashboardCommand extends Command
              ->option('--port port', 'The port to serve the dashboard on (default: 8001)')
              ->option('--php-path php_path', 'Path to the PHP executable (default: php)')
              ->option('--dashboard-dir dashboard_dir', 'Path to the dashboard public directory (default: [project_root]/dashboard)');
-
-        // Set default values
-        $this->host = $config['host'] ?? $this->defaults['host'];
-        $this->port = $config['port'] ?? $this->defaults['port'];
-        $this->phpPath = $config['php_path'] ?? 'php';
-        $this->dashboardDir = $config['dashboard_dir'] ?? null;
     }
 
     /**
