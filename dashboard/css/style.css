@@ -1,0 +1,291 @@
+:root {
+    --bg-color: #f8f9fa;
+    --text-color: #333;
+    --card-bg: #fff;
+    --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --header-bg: #fff;
+    --badge-primary: #0d6efd;
+    --badge-success: #198754;
+    --badge-danger: #dc3545;
+    --badge-info: #0dcaf0;
+    --badge-warning: #ffc107;
+}
+
+[data-theme="dark"] {
+    --bg-color: #212529;
+    --text-color: #f8f9fa;
+    --card-bg: #343a40;
+    --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    --header-bg: #2c3034;
+    --badge-primary: #6ea8fe;
+    --badge-success: #20c997;
+    --badge-danger: #f27474;
+    --badge-info: #6edff6;
+    --badge-warning: #ffca2c;
+}
+
+[data-theme="dark"] .card-header {
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .list-group-item {
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .card-body {
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .badge {
+    color: #fff; /* Ensure badge text is always white for readability */
+}
+
+[data-theme="dark"] .table {
+    background-color: var(--card-bg); /* Match the card background */
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .table thead th, .table>:not(caption)>*>* {
+    background-color: var(--header-bg); /* Match the header background */
+    color: var(--text-color);
+    border-bottom: 2px solid #495057; /* Slightly lighter border for contrast */
+}
+
+[data-theme="dark"] .table tbody tr, .table>:not(caption)>*>* {
+    background-color: var(--card-bg);
+    border-bottom: 1px solid #495057; /* Subtle border between rows */
+}
+
+[data-theme="dark"] .table-hover tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.1); /* Keep the hover effect */
+}
+
+[data-theme="dark"] .form-control {
+    background-color: #495057;
+    color: var(--text-color);
+    border-color: #6c757d;
+}
+
+[data-theme="dark"] .form-control::placeholder {
+    color: #ced4da; /* Lighter gray for better visibility */
+    opacity: 1; /* Ensure full opacity for readability */
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: 'Inter', sans-serif;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+.card {
+    border: none;
+    border-radius: 10px;
+    background-color: var(--card-bg);
+    box-shadow: var(--card-shadow);
+    transition: transform 0.2s, background-color 0.3s;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+}
+
+.card-header {
+    background-color: var(--header-bg);
+    border-bottom: none;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.list-group-item {
+    border: none;
+    padding: 0.5rem 1rem;
+    font-size: 0.95rem;
+    background-color: var(--card-bg);
+    color: var(--text-color);
+}
+
+.badge {
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.badge-primary { background-color: var(--badge-primary); }
+.badge-success { background-color: var(--badge-success); }
+.badge-danger { background-color: var(--badge-danger); }
+.badge-info { background-color: var(--badge-info); }
+.badge-warning { background-color: var(--badge-warning); }
+
+.chart-container {
+    background-color: var(--card-bg);
+    border-radius: 10px;
+    padding: 1rem;
+    box-shadow: var(--card-shadow);
+}
+
+.btn-outline-primary {
+    transition: all 0.3s;
+    color: var(--text-color);
+    border-color: var(--badge-primary);
+}
+
+.btn-outline-primary:hover {
+    background-color: var(--badge-primary);
+    color: #fff;
+}
+
+/* Truncate long URLs with ellipsis and show full text on hover */
+#request-log td:nth-child(2) {
+    max-width: 200px; /* Adjust this width as needed */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#request-log td:nth-child(2):hover {
+    position: relative;
+}
+
+#request-log td:nth-child(2):hover::after {
+    content: attr(data-full-url);
+    position: absolute;
+    left: 0;
+    top: 100%;
+    z-index: 10;
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    padding: 5px 10px;
+    border-radius: 4px;
+    box-shadow: var(--card-shadow);
+    white-space: normal;
+    max-width: 400px;
+    word-wrap: break-word;
+}
+
+/* Ensure table header stays fixed while body scrolls */
+.table-responsive table {
+    width: 100%;
+}
+
+.table-responsive thead {
+    position: sticky;
+    top: 0;
+    background-color: var(--header-bg);
+    z-index: 1;
+}
+
+/* Fix for request log table scrolling */
+.table-responsive {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+/* Important: Make tbody display as table-row-group, not block */
+#request-log {
+    display: table-row-group !important;
+}
+
+/* Truncate long URLs with ellipsis and show full text on hover */
+#request-log td:nth-child(2) {
+    max-width: 300px; /* Adjust this width as needed */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    position: relative;
+}
+
+/* Only show hover effect for elements with the 'truncated-url' class */
+#request-log td.truncated-url:hover {
+    overflow: visible;
+    white-space: normal;
+    word-break: break-all;
+    z-index: 1;
+}
+
+#request-log td.truncated-url:hover::before {
+    content: attr(data-full-url);
+    position: absolute;
+    left: 0;
+    top: 100%;
+    width: 300px;
+    background-color: var(--card-bg);
+    border: 1px solid var(--text-color);
+    padding: 5px;
+    border-radius: 3px;
+    box-shadow: var(--card-shadow);
+    word-break: break-all;
+    white-space: normal;
+    z-index: 10;
+}
+
+/* Ensure table column widths are appropriate */
+#request-log td:nth-child(1) { /* Timestamp */
+    width: 160px;
+}
+#request-log td:nth-child(3) { /* Total Time */
+    width: 120px;
+}
+#request-log td:nth-child(4) { /* Response Code */
+    width: 120px;
+}
+#request-log td:nth-child(5) { /* Details */
+    width: 100px;
+}
+
+/* JSON formatter styles */
+.json-formatter {
+    background: #f8f9fa;
+    border-radius: 4px;
+    padding: 10px;
+    font-family: monospace;
+    font-size: 13px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+[data-theme="dark"] .json-formatter {
+    background: #2c3034;
+}
+
+.json-key {
+    color: #0d6efd;
+}
+
+.json-string {
+    color: #20c997;
+}
+
+.json-number {
+    color: #fd7e14;
+}
+
+.json-boolean {
+    color: #dc3545;
+}
+
+.json-null {
+    color: #6c757d;
+}
+
+/* Adjust table styles */
+.card-body .table {
+    font-size: 0.9rem;
+}
+
+.card-body .table td code {
+    white-space: pre-wrap;
+    max-width: 300px;
+    display: block;
+    overflow-x: auto;
+}
+
+/* Enhance accordion for custom events */
+.accordion-button {
+    padding: 0.5rem 1rem;
+}
+
+.accordion-body {
+    padding: 1rem;
+}

@@ -28,7 +28,7 @@ class SqlitePresenter implements PresenterInterface
     /**
      * {@inheritdoc}
      */
-    public function getDashboardData(string $threshold): array
+    public function getDashboardData(string $threshold, string $range = 'last_hour'): array
     {
         // Slowest Requests
         $stmt = $this->db->prepare('SELECT request_id, request_url, total_time FROM apm_requests WHERE timestamp >= ? ORDER BY total_time DESC LIMIT 5');
@@ -68,12 +68,26 @@ class SqlitePresenter implements PresenterInterface
         $hitCount = $hits ? array_sum(array_column($hits, 'count')) : 0;
         $cacheHitRate = $totalCacheOps > 0 ? $hitCount / $totalCacheOps : 0;
 
-        // Response Code Distribution Over Time
+        // Response Code Distribution Over Time - with interval based on time range
         $stmt = $this->db->prepare('SELECT timestamp, response_code FROM apm_requests WHERE timestamp >= ? ORDER BY timestamp');
         $stmt->execute([$threshold]);
         $requestData = $stmt->fetchAll();
         $responseCodeData = [];
-        $interval = 300; // 5 minutes
+        
+        // Set interval based on the selected time range
+        switch ($range) {
+            case 'last_day':
+                $interval = 1800; // 30 minutes (60 * 30)
+                break;
+            case 'last_week':
+                $interval = 21600; // 6 hours (60 * 60 * 6)
+                break;
+            case 'last_hour':
+            default:
+                $interval = 300; // 5 minutes (default)
+                break;
+        }
+        
         foreach ($requestData as $row) {
             $timestamp = strtotime($row['timestamp']);
             $bucket = floor($timestamp / $interval) * $interval;
@@ -108,7 +122,8 @@ class SqlitePresenter implements PresenterInterface
         $stmt->execute([$threshold]);
         $requestData = $stmt->fetchAll();
         $aggregatedData = [];
-        $interval = 300; // 5 minutes
+        
+        // Use the same interval for consistent visualization
         foreach ($requestData as $row) {
             $timestamp = strtotime($row['timestamp']);
             $bucket = floor($timestamp / $interval) * $interval;
