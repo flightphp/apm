@@ -1,28 +1,29 @@
 <?php
 
-namespace flight\apm\presenter;
+namespace flight\apm\reader;
 
 use flight\apm\ApmFactoryAbstract;
 use InvalidArgumentException;
 
-class PresenterFactory extends ApmFactoryAbstract
+class ReaderFactory extends ApmFactoryAbstract
 {
     /**
-     * Create a presenter based on the database connection
+     * Create a reader based on the database connection
      *
      * @param string|null $runwayConfigPath Path to the runway config file
-     * @return PresenterInterface A presenter implementation
+     * @return ReaderInterface A reader implementation
      */
-    public static function create(string $runwayConfigPath): PresenterInterface
+    public static function create(?string $runwayConfigPath = null): ReaderInterface
     {
 		if ($runwayConfigPath === null) {
 			$runwayConfigPath = self::autoLocateRunwayConfigPath();
 		}
 		$runwayConfig = self::loadConfig($runwayConfigPath);
-        $storageType = $runwayConfig['apm']['storage_type'];
+
+        $storageType = $runwayConfig['apm']['source_type'];
 		switch($storageType) {
 			case 'sqlite':
-				return new SqlitePresenter($runwayConfig['apm']['dest_db_dsn']);
+				return new SqliteReader($runwayConfig['apm']['source_db_dsn']);
 			default:
 				throw new InvalidArgumentException("Unsupported storage type: $storageType");
 		}

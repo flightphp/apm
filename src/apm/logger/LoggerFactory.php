@@ -1,28 +1,29 @@
 <?php
 
-namespace flight\apm\presenter;
+namespace flight\apm\logger;
 
 use flight\apm\ApmFactoryAbstract;
 use InvalidArgumentException;
 
-class PresenterFactory extends ApmFactoryAbstract
+class LoggerFactory extends ApmFactoryAbstract
 {
     /**
-     * Create a presenter based on the database connection
+     * Create a logger based on the database connection
      *
      * @param string|null $runwayConfigPath Path to the runway config file
-     * @return PresenterInterface A presenter implementation
+     * @return LoggerInterface A logger implementation
      */
-    public static function create(string $runwayConfigPath): PresenterInterface
+    public static function create(?string $runwayConfigPath = null): LoggerInterface
     {
 		if ($runwayConfigPath === null) {
 			$runwayConfigPath = self::autoLocateRunwayConfigPath();
 		}
 		$runwayConfig = self::loadConfig($runwayConfigPath);
-        $storageType = $runwayConfig['apm']['storage_type'];
+
+        $storageType = $runwayConfig['apm']['source_type'];
 		switch($storageType) {
 			case 'sqlite':
-				return new SqlitePresenter($runwayConfig['apm']['dest_db_dsn']);
+				return new SqliteLogger($runwayConfig['apm']['dest_db_dsn']);
 			default:
 				throw new InvalidArgumentException("Unsupported storage type: $storageType");
 		}

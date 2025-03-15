@@ -4,14 +4,8 @@ declare(strict_types=1);
 
 namespace flight\commands;
 
-use Ahc\Cli\IO\Interactor;
-use flight\apm\AbstractBaseWorkerCommand;
-use flight\apm\reader\ReaderInterface;
-use flight\apm\reader\SqliteReader;
-use flight\apm\reader\MysqlReader;
-use flight\apm\reader\TimescaledbReader;
-use flight\apm\reader\FileReader;
-use flight\apm\writer\StorageInterface;
+use flight\apm\reader\ReaderFactory;
+use flight\apm\writer\WriterFactory;
 
 /**
  * WorkerCommand
@@ -32,7 +26,7 @@ use flight\apm\writer\StorageInterface;
  * @property-read ?bool $daemon
  * @property-read ?int $batchSize
  */
-class WorkerCommand extends AbstractBaseWorkerCommand
+class WorkerCommand extends AbstractBaseCommand
 {
     /**
      * Default configuration values
@@ -65,26 +59,44 @@ class WorkerCommand extends AbstractBaseWorkerCommand
     {
         parent::__construct('apm:worker', 'Starts a worker to migrate APM metrics from source to destination storage.', $config);
 
-        // Processing options
+		// Initialize configuration
+		$this->registerStorageWorkerOptions();
+    }
+
+	protected function registerStorageWorkerOptions(): void
+	{
+
+		// Processing options
         $this->option('--timeout timeout', 'Timeout in seconds for processing (0 = wait forever)');
         $this->option('--max_messages max_messages', 'Maximum number of messages to process (0 = unlimited)');
         $this->option('--daemon', 'Run in daemon mode (continuous processing)');
         $this->option('--batch_size batch_size', 'Number of messages to process per batch');
 
-    }
-	
-	/**
-	 * Interact with the user to gather configuration options
-	 *
-	 * @param Interactor $io The IO instance for user interaction
-	 * @return void
-	 */
-	public function interact(Interactor $io)
-	{
-		// Initialize configuration
-		$this->registerStorageWorkerOptions();
+		 // Add option for config file path
+		$this->option('--config-file', 'Path to the runway config file', null, getcwd() . '/.runway-config.json');
+
 	}
 
+	protected function autoLocateRunwayConfigPath(): string
+	{
+		$paths = [
+			getcwd().'/.runway-config.json',
+			__DIR__.'/../.runway-config.json',
+			__DIR__.'/../../.runway-config.json'
+		];
+
+		foreach ($paths as $path) {
+			if (file_exists($path) === true) {
+				return $path;
+			}
+		}
+
+		$interactor = $this->app()->io();
+		$interactor->red('Runway APM configuration not found. Please run "php vendor/bin/runway apm:init" first to configure the APM.', true);
+		$interactor->orange('Could not find .runway-config.json file. Please define the path to the config file for the Factory object. It should be in /path/to/project-root/.runway-config.json', true);
+		exit(1);
+	}
+	
     /**
      * Executes the worker command
      *
@@ -128,15 +140,25 @@ class WorkerCommand extends AbstractBaseWorkerCommand
             'head' => 'boldGreen'
         ]);
 
+		if(empty($this->configFile)) {
+			$runwayConfigPath = $this->autoLocateRunwayConfigPath();
+		} else {
+			$runwayConfigPath = $this->configFile;
+			if(!file_exists($runwayConfigPath)) {
+				$io->red("Runway config file not found at: " . $runwayConfigPath, true);
+				return;
+			}
+		}
+
         try {
             // Setup source reader
             $io->write('Setting up source reader... ');
-            $reader = $this->getReader($options);
+            $reader = ReaderFactory::create($runwayConfigPath);
             $io->green('Done!', true);
             
             // Setup destination storage
             $io->write('Setting up destination storage... ');
-            $storage = $this->getStorageWorker($options);
+            $storage = WriterFactory::create($runwayConfigPath);
             $io->green('Done!', true);
 
             $io->bold('Processing metrics...', true);
@@ -220,78 +242,6 @@ class WorkerCommand extends AbstractBaseWorkerCommand
         }
     }
 
-    /**
-     * Get a reader instance based on configuration
-     *
-     * @param array $options Configuration options
-     * @return ReaderInterface The configured reader
-     */
-    protected function getReader(array $options): ReaderInterface
-    {
-        switch ($options['sourceType']) {
-            case 'sqlite':
-                return new SqliteReader(
-                    $options['sourceDbDsn'],
-                    $options['sourceTable']
-                );
-                
-            case 'mysql':
-                return new MysqlReader(
-                    $options['sourceDbDsn'],
-                    $options['sourceDbUser'],
-                    $options['sourceDbPass'],
-                    $options['sourceTable']
-                );
-                
-            case 'timescaledb':
-                return new TimescaledbReader(
-                    $options['sourceDbDsn'],
-                    $options['sourceDbUser'],
-                    $options['sourceDbPass'],
-                    $options['sourceTable']
-                );
-                
-            case 'file':
-                return new FileReader($options['sourceFilePath']);
-                
-            default:
-                throw new \InvalidArgumentException("Invalid source type: {$options['sourceType']}");
-        }
-    }
-
-    /**
-     * Get a storage instance based on configuration
-     *
-     * @param array $options Configuration options
-     * @return StorageInterface The configured storage
-     */
-    protected function getStorageWorker(array $options): StorageInterface
-    {
-        switch ($options['destType']) {
-            case 'file':
-                return new \flight\apm\writer\FileStorage($options['destFilePath']);
-                
-            case 'sqlite':
-                return new \flight\apm\writer\SqliteStorage($options['destDbDsn']);
-                
-            case 'mysql':
-                return new \flight\apm\writer\MysqlStorage(
-                    $options['destDbDsn'], 
-                    $options['destDbUser'], 
-                    $options['destDbPass']
-                );
-                
-            case 'timescaledb':
-                return new \flight\apm\writer\TimescaledbStorage(
-                    $options['destDbDsn'], 
-                    $options['destDbUser'], 
-                    $options['destDbPass']
-                );
-                
-            default:
-                throw new \InvalidArgumentException("Invalid destination type: {$options['destType']}");
-        }
-    }
 
     /**
      * Get worker options from config, defaults and command line
