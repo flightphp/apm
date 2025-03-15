@@ -7,7 +7,7 @@ namespace flight\apm\writer;
 use PDO;
 use PDOException;
 
-class SqliteStorage implements StorageInterface
+class SqliteWriter implements WriterInterface
 {
     private PDO $pdo;
     private array $statementCache = [];

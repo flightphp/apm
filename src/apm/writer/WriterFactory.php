@@ -13,7 +13,7 @@ class WriterFactory extends ApmFactoryAbstract
      * @param string|null $runwayConfigPath Path to the runway config file
      * @return WriterInterface A writer implementation
      */
-    public static function create(?string $runwayConfigPath = null): StorageInterface
+    public static function create(?string $runwayConfigPath = null): WriterInterface
     {
 		if ($runwayConfigPath === null) {
 			$runwayConfigPath = self::autoLocateRunwayConfigPath();
@@ -23,7 +23,7 @@ class WriterFactory extends ApmFactoryAbstract
         $storageType = $runwayConfig['apm']['storage_type'];
 		switch($storageType) {
 			case 'sqlite':
-				return new SqliteStorage($runwayConfig['apm']['dest_db_dsn']);
+				return new SqliteWriter($runwayConfig['apm']['dest_db_dsn']);
 			default:
 				throw new InvalidArgumentException("Unsupported storage type: $storageType");
 		}

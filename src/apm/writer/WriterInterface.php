@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace flight\apm\writer;
 
-interface StorageInterface
+interface WriterInterface
 {
 	/**
 	 * Store the given data.
