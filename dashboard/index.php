@@ -27,9 +27,8 @@ $appRootPath = dirname($finalPath).'/../';
 
 $app = Flight::app();
 $app->set('flight.views.path', __DIR__.'/views');
-$runwayConfig = json_decode(file_get_contents($appRootPath.'/.runway-config.json'), true);
 
-$presenter = PresenterFactory::create($runwayConfig);
+$presenter = PresenterFactory::create($appRootPath.'/.runway-config.json');
 
 function calculateThreshold($range) {
     $map = [

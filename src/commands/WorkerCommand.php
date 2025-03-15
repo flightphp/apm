@@ -297,7 +297,7 @@ class WorkerCommand extends AbstractBaseCommand
         }
         
         // Handle boolean flag
-        $options['daemon'] = property_exists($this, 'daemon') && $this->daemon === true;
+        $options['daemon'] = $this->daemon;
         
         // Convert numeric values
         foreach (['timeout', 'maxMessages', 'batchSize'] as $numKey) {
