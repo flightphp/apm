@@ -145,6 +145,7 @@ class SqlitePresenter implements PresenterInterface
     public function getRequestsData(string $threshold, int $page, int $perPage, string $search = ''): array
     {
         $offset = ($page - 1) * $perPage;
+        $maxRequests = 500; // Limit to a maximum of 500 requests
         
         // Check if database supports JSON functions
         $hasJsonFunctions = $this->databaseSupportsJson();
@@ -153,13 +154,12 @@ class SqlitePresenter implements PresenterInterface
 		$search = trim($search);
         $searchInCustomEvents = !empty($search);
         
-        // Get all matching request IDs based on URL and response code
-        $urlResponseCodeQuery = 'SELECT request_id FROM apm_requests WHERE timestamp >= ?';
-        $urlResponseParams = [$threshold];
+        // Get all matching request IDs based on URL and response code, limited to 500
+        $urlResponseCodeQuery = 'SELECT request_id FROM apm_requests WHERE timestamp >= ? ORDER BY timestamp DESC LIMIT ?';
+        $urlResponseParams = [$threshold, $maxRequests];
         if ($search) {
-            $urlResponseCodeQuery .= ' AND (request_url LIKE ? OR response_code LIKE ?)';
-            $urlResponseParams[] = "%$search%";
-            $urlResponseParams[] = "%$search%";
+            $urlResponseCodeQuery = 'SELECT request_id FROM apm_requests WHERE timestamp >= ? AND (request_url LIKE ? OR response_code LIKE ?) ORDER BY timestamp DESC LIMIT ?';
+            $urlResponseParams = [$threshold, "%$search%", "%$search%", $maxRequests];
         }
 
         $stmt = $this->db->prepare($urlResponseCodeQuery);
@@ -174,14 +174,15 @@ class SqlitePresenter implements PresenterInterface
                 // SQLite JSON functions
                 $customEventsQuery = "SELECT request_id FROM apm_custom_events 
                     WHERE event_type LIKE ? 
-                    OR json_extract(event_data, '$') LIKE ?";
+                    OR json_extract(event_data, '$') LIKE ?
+                    LIMIT ?";
                 $stmt = $this->db->prepare($customEventsQuery);
-                $stmt->execute(["%$search%", "%$search%"]);
+                $stmt->execute(["%$search%", "%$search%", $maxRequests]);
             } else {
                 // Fallback: Search only in event_type
-                $customEventsQuery = "SELECT request_id FROM apm_custom_events WHERE event_type LIKE ?";
+                $customEventsQuery = "SELECT request_id FROM apm_custom_events WHERE event_type LIKE ? LIMIT ?";
                 $stmt = $this->db->prepare($customEventsQuery);
-                $stmt->execute(["%$search%"]);
+                $stmt->execute(["%$search%", $maxRequests]);
             }
             $customEventRequestIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
         }
