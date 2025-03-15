@@ -65,7 +65,7 @@ class SqlitePresenter implements PresenterInterface
         $cacheData = $stmt->fetchAll();
         $totalCacheOps = array_sum(array_column($cacheData, 'count'));
         $hits = array_filter($cacheData, fn($row) => $row['hit'] == 1);
-        $hitCount = $hits ? $hits[0]['count'] : 0;
+        $hitCount = $hits ? array_sum(array_column($hits, 'count')) : 0;
         $cacheHitRate = $totalCacheOps > 0 ? $hitCount / $totalCacheOps : 0;
 
         // Response Code Distribution Over Time
