@@ -14,11 +14,15 @@ class SqliteLogger extends DatabaseLoggerAbstract implements LoggerInterface {
      *
      * Initializes the PDO connection and ensures the required table exists
      *
-     * @param PDO $pdo Database connection instance
+     * @param string $dsn The Data Source Name (DSN) for the SQLite database
      */
-    public function __construct(PDO $pdo)
+    public function __construct(string $dsn)
     {
-        $this->pdo = $pdo;
+        $this->pdo = new PDO($dsn, null, null, [
+			PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+			PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+			PDO::ATTR_EMULATE_PREPARES => false,
+		]);
         $this->ensureTableExists();
     }
 
