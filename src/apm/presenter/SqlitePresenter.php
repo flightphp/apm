@@ -273,7 +273,7 @@ class SqlitePresenter implements PresenterInterface
         $request['errors'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Cache Operations
-        $stmt = $this->db->prepare('SELECT cache_key, cache_operation, hit, execution_time FROM apm_cache WHERE request_id = ?');
+        $stmt = $this->db->prepare('SELECT cache_key, hit, execution_time FROM apm_cache WHERE request_id = ?');
         $stmt->execute([$requestId]);
         $request['cache'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
         

@@ -322,16 +322,15 @@ class SqliteWriter implements WriterInterface
         
         $stmt = $this->getStatement('
             INSERT INTO apm_cache (
-                request_id, cache_key, cache_operation, hit, execution_time
-            ) VALUES (?, ?, ?, ?, ?)
+                request_id, cache_key, hit, execution_time
+            ) VALUES (?, ?, ?, ?)
         ');
         
         foreach ($cacheData as $key => $data) {
             $stmt->execute([
                 $requestId,
                 $key,
-                $data['operation'] ?? null,
-                isset($data['hit']) ? (int)$data['hit'] : null, // Convert boolean to int
+                isset($data['hit']) ? (int) $data['hit'] : null, // Convert boolean to int
                 $data['execution_time'] ?? null
             ]);
         }
@@ -551,7 +550,6 @@ class SqliteWriter implements WriterInterface
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             request_id TEXT NOT NULL,
             cache_key TEXT,
-            cache_operation TEXT,
             hit INTEGER,
             execution_time REAL,
             FOREIGN KEY (request_id) REFERENCES apm_requests(request_id) ON DELETE CASCADE

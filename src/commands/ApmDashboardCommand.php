@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace flight\commands;
 
-use Ahc\Cli\Helper\Shell;
-use Ahc\Cli\IO\Interactor;
 use Ahc\Cli\Input\Command;
 
 /**

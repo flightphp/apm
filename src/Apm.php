@@ -94,9 +94,11 @@ class Apm
             ];
         });
 
-        $dispatcher->on('flight.middleware.executed', function (Route $route, $middleware, float $executionTime) {
+        $dispatcher->on('flight.middleware.executed', function (Route $route, $middleware, string $method, float $executionTime) {
+			$middlewareName = is_object($middleware) ? get_class($middleware) : (string)$middleware;
+			$middlewareName .= '->' . $method;
             $this->metrics['middleware'][$route->pattern][] = [
-                'middleware' => is_object($middleware) ? get_class($middleware) : (string)$middleware,
+                'middleware' => $middlewareName,
                 'execution_time' => round($executionTime, 8)
             ];
         });
@@ -118,6 +120,13 @@ class Apm
                 'code' => $e->getCode(),
                 'trace' => $e->getTraceAsString()
             ];
+        });
+
+		$dispatcher->on('flight.cache.checked', function (string $type, bool $hit, float $executionTime) {
+            $this->metrics['cache'][$type] = [
+				'hit' => $hit,
+				'execution_time' => round($executionTime, 8)
+			];
         });
 		
 		$dispatcher->on('apm.custom', function (CustomEvent $CustomEvent) {
