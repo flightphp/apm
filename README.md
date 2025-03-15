@@ -75,6 +75,8 @@ Want the full scoop? Check out the [FlightPHP APM Documentation](https://docs.fl
 
 Join us on [Matrix IRC #flight-php-framework:matrix.org](https://matrix.to/#/#flight-php-framework:matrix.org) to chat, ask questions, or share your APM wins!
 
+[![](https://dcbadge.limes.pink/api/server/https://discord.gg/Ysr4zqHfbX)](https://discord.gg/Ysr4zqHfbX)
+
 ## License
 
 MIT—free and open for all!
