@@ -69,9 +69,9 @@ class InitCommand extends AbstractBaseCommand
         // Select source type
         $sourceTypes = [
             '1' => 'sqlite',
-            '2' => 'file',
-            '3' => 'mysql',
-            '4' => 'timescaledb'
+            // '2' => 'file',
+            // '3' => 'mysql',
+            // '4' => 'timescaledb'
         ];
         
         $choice = $io->choice('What type of source would you like to read from?', $sourceTypes, '1');
@@ -117,9 +117,9 @@ class InitCommand extends AbstractBaseCommand
         // Select storage type
         $storageTypes = [
             '1' => 'sqlite',
-            '2' => 'file',
-            '3' => 'mysql',
-            '4' => 'timescaledb'
+            // '2' => 'file',
+            // '3' => 'mysql',
+            // '4' => 'timescaledb'
         ];
         
         $choice = $io->choice('What type of storage would you like to use for destination?', $storageTypes, '1');
