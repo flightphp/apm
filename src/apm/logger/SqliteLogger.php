@@ -4,9 +4,23 @@ declare(strict_types=1);
 
 namespace flight\apm\logger;
 
+use PDO;
 use PDOException;
 
 class SqliteLogger extends DatabaseLoggerAbstract implements LoggerInterface {
+
+	/**
+     * Constructor for the database logger
+     *
+     * Initializes the PDO connection and ensures the required table exists
+     *
+     * @param PDO $pdo Database connection instance
+     */
+    public function __construct(PDO $pdo)
+    {
+        $this->pdo = $pdo;
+        $this->ensureTableExists();
+    }
 
 	/**
 	 * @inheritDoc

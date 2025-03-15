@@ -29,19 +29,6 @@ abstract class DatabaseLoggerAbstract
     protected bool $tableCreated = false;
 
     /**
-     * Constructor for the database logger
-     *
-     * Initializes the PDO connection and ensures the required table exists
-     *
-     * @param PDO $pdo Database connection instance
-     */
-    public function __construct(PDO $pdo)
-    {
-        $this->pdo = $pdo;
-        $this->ensureTableExists();
-    }
-
-    /**
      * Abstract method to ensure the metrics table exists
      *
      * Implementations should create the table if it doesn't exist
