@@ -69,7 +69,7 @@ class WorkerCommand extends AbstractBaseCommand
 		// Processing options
         $this->option('--timeout timeout', 'Timeout in seconds for processing (0 = wait forever)');
         $this->option('--max_messages max_messages', 'Maximum number of messages to process (0 = unlimited)');
-        $this->option('--daemon', 'Run in daemon mode (continuous processing)');
+        $this->option('-d --daemon', 'Run in daemon mode (continuous processing)');
         $this->option('--batch_size batch_size', 'Number of messages to process per batch');
 
 		 // Add option for config file path

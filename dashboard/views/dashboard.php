@@ -545,7 +545,6 @@
                                     <thead>
                                         <tr>
                                             <th>Key</th>
-                                            <th>Operation</th>
                                             <th>Result</th>
                                             <th>Time</th>
                                         </tr>
@@ -554,7 +553,6 @@
                                         ${r.cache.map(c => `
                                             <tr>
                                                 <td>${c.cache_key}</td>
-                                                <td>${c.cache_operation}</td>
                                                 <td>${c.hit ? '<span class="badge bg-success">Hit</span>' : '<span class="badge bg-warning">Miss</span>'}</td>
                                                 <td>${(parseFloat(c.execution_time) * 1000).toFixed(3)} ms</td>
                                             </tr>
