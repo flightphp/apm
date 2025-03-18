@@ -135,7 +135,7 @@ class SqlitePresenter implements PresenterInterface
         }
         $chartData = array_map(function($bucket, $data) {
             return [
-                'timestamp' => date('Y-m-d H:i:s', $bucket),
+                'timestamp' => date('Y-m-d H:i:s', (int) $bucket),
                 'average_time' => $data['sum'] / $data['count'],
             ];
         }, array_keys($aggregatedData), $aggregatedData);
@@ -151,6 +151,7 @@ class SqlitePresenter implements PresenterInterface
             'p95' => $p95,
             'p99' => $p99,
             'chartData' => $chartData,
+            'allRequestsCount' => $totalRequests,
         ];
     }
 
@@ -215,7 +216,7 @@ class SqlitePresenter implements PresenterInterface
                     'totalPages' => 0,
                     'perPage' => $perPage,
                     'totalRequests' => 0,
-                ],
+                ]
             ];
         }
         
@@ -234,7 +235,7 @@ class SqlitePresenter implements PresenterInterface
                     'totalPages' => $totalPages,
                     'perPage' => $perPage,
                     'totalRequests' => $totalRequests,
-                ],
+                ]
             ];
         }
         
@@ -262,7 +263,7 @@ class SqlitePresenter implements PresenterInterface
                 'totalPages' => $totalPages,
                 'perPage' => $perPage,
                 'totalRequests' => $totalRequests,
-            ],
+            ]
         ];
     }
 

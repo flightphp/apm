@@ -167,5 +167,19 @@ class InitCommand extends AbstractBaseCommand
         file_put_contents($configFile, $json);
         
         $io->boldGreen('APM configuration saved successfully! Configuration saved at '. $configFile, true);
+
+		$answer = $io->prompt('Do you want to run the migration now? (y/n)', 'y',);
+
+		if (strtolower($answer) !== 'y') {
+			$io->info('Exiting without running migration.', true);
+			return;
+		}
+
+
+		$io->info('Running migration...', true);
+
+		$this->app()->handle([ 'vendor/bin/runway', 'apm:migrate', '--config-file', $configFile ]);
+
+		$io->boldGreen('Migration completed successfully!', true);
     }
 }

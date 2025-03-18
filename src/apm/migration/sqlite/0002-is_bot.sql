@@ -1,0 +1,2 @@
+ALTER TABLE apm_requests
+ADD COLUMN is_bot INTEGER DEFAULT 0;

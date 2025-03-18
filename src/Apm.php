@@ -77,7 +77,7 @@ class Apm
 		];
 		$this->metrics['cache'] = [];
 		$this->metrics['custom'] = [];
-
+		$this->metrics['is_bot'] = false;
         $dispatcher = $app->eventDispatcher();
 
         $dispatcher->on('flight.request.received', function (Request $request) {
@@ -85,6 +85,10 @@ class Apm
             $this->metrics['start_memory'] = memory_get_usage();
 			$this->metrics['request_method'] = $request->method;
 			$this->metrics['request_url'] = $request->url;
+
+			// Check if the request is from a bot
+			$userAgent = $request->headers['User-Agent'] ?? '';
+			$this->metrics['is_bot'] = $this->isBot($userAgent);
         });
 
         $dispatcher->on('flight.route.executed', function (Route $route, float $executionTime) {
@@ -184,4 +188,38 @@ class Apm
     {
         return $this->metrics;
     }
+
+	/**
+	 * Checks if the user agent string belongs to a known bot.
+	 * 
+	 * This method checks the user agent string against a list of known bot user agents
+	 * 
+	 * @param string $userAgent The user agent string to check.
+	 * 
+	 * @return bool Returns true if the user agent is a bot, false otherwise.
+	 */
+	public function isBot(string $userAgent): bool
+	{
+		// List of known bot user agents
+		$botUserAgents = [
+			'Googlebot',
+			'Bingbot',
+			'Slurp',
+			'DuckDuckBot',
+			'Baiduspider',
+			'YandexBot',
+			'Sogou',
+			'Exabot',
+			'facebot',
+			'ia_archiver'
+		];
+
+		foreach ($botUserAgents as $bot) {
+			if (stripos($userAgent, $bot) !== false) {
+				return true;
+			}
+		}
+
+		return false;
+	}
 }

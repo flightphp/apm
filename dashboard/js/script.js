@@ -35,36 +35,34 @@ themeToggle.addEventListener('click', () => {
 // Function to format a UTC timestamp to the selected timezone
 function formatTimestamp(utcTimestamp) {
     try {
-        // Parse the timestamp string into a Date object
-        // The database timestamp is already in UTC
-        const date = new Date(utcTimestamp);
+        let date;
         
-        // If date parsing failed, try alternate parsing
-        if (isNaN(date.getTime())) {
-            // Handle potential custom format
+        // Check if timestamp is in ISO format or contains 'Z' (indicating UTC)
+        if (utcTimestamp.includes('T') && (utcTimestamp.includes('Z') || utcTimestamp.includes('+'))) {
+            // Already in ISO format with timezone info, just parse it
+            date = new Date(utcTimestamp);
+        } else {
+            // Assume format: YYYY-MM-DD HH:MM:SS and explicitly treat as UTC
+            // MySQL timestamp format from database
             const parts = utcTimestamp.split(/[- :]/);
             if (parts.length >= 6) {
-                // Assume format: YYYY-MM-DD HH:MM:SS and create as UTC
-                return new Date(Date.UTC(
+                date = new Date(Date.UTC(
                     parseInt(parts[0]),
                     parseInt(parts[1])-1,
                     parseInt(parts[2]),
                     parseInt(parts[3]),
                     parseInt(parts[4]),
                     parseInt(parts[5])
-                )).toLocaleString('en-US', { 
-                    timeZone: selectedTimezone,
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: false
-                });
+                ));
             } else {
-                throw new Error("Invalid timestamp format");
+                // If no specific format is detected, append 'Z' to signal UTC
+                date = new Date(utcTimestamp + 'Z');
             }
+        }
+        
+        // Check if date parsing succeeded
+        if (isNaN(date.getTime())) {
+            throw new Error("Invalid timestamp format");
         }
         
         // Format the date in the selected timezone
@@ -163,6 +161,9 @@ function populateWidgets(data) {
             <span class="badge bg-primary rounded-pill">${time.toFixed(3)} ms</span>
         </li>`;
     }).join('');
+
+	const allRequestsCount = document.getElementById('all-requests-count');
+	allRequestsCount.textContent = data.allRequestsCount;
 
     document.getElementById('cache-hit-rate').textContent = `${(data.cacheHitRate * 100).toFixed(2)}% Hits`;
 
