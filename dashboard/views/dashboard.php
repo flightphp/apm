@@ -48,10 +48,10 @@
         </div>
 
         <!-- Total Requests Summary -->
-        <div class="alert alert-info d-flex align-items-center mb-4">
+        <div class="d-flex align-items-center mb-4">
             <i class="bi bi-info-circle-fill me-2"></i>
-            <div>
-                <span class="fw-bold">Total Requests:</span> <span id="all-requests-count">Loading...</span> in the selected time period
+            <div title="In the selected time period">
+                <span class="fw-bold">Total Requests:</span> <span id="all-requests-count">Loading...</span> 
             </div>
         </div>
 

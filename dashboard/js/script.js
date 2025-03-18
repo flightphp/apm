@@ -64,17 +64,19 @@ function formatTimestamp(utcTimestamp) {
         if (isNaN(date.getTime())) {
             throw new Error("Invalid timestamp format");
         }
+
+		// get the locale from the browser
+		const locale = navigator.language || 'en-US';
         
         // Format the date in the selected timezone
-        return date.toLocaleString('en-US', { 
+        return date.toLocaleString(locale, { 
             timeZone: selectedTimezone,
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
             hour: '2-digit',
             minute: '2-digit',
-            second: '2-digit',
-            hour12: false
+            second: '2-digit'
         });
     } catch (error) {
         console.error("Error formatting timestamp:", error, utcTimestamp);
@@ -363,7 +365,7 @@ function populateRequestLog(requests) {
         return `
             <tr>
                 <td>${formattedTimestamp}</td>
-                <td class="${urlCellClass}" data-full-url="${r.request_url}" title="${r.request_url}">${r.request_url}</td>
+                <td class="${urlCellClass}" data-full-url="${r.request_url}">${r.request_url}</td>
                 <td>${time.toFixed(3)} ms</td>
                 <td>${r.response_code}</td>
                 <td>
