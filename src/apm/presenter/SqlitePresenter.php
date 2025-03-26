@@ -182,10 +182,17 @@ class SqlitePresenter implements PresenterInterface
         $isBot = $_GET['is_bot'] ?? '';
         $customEventType = $_GET['custom_event_type'] ?? '';
         $minTime = $_GET['min_time'] ?? '';
+        $requestId = $_GET['request_id'] ?? '';
         
         // Build main query with conditions for URL and response code
         $conditions = ['timestamp >= ?'];
         $params = [$threshold];
+
+        // Add request ID filter (exact match)
+        if (!empty($requestId)) {
+            $conditions[] = 'request_id = ?';
+            $params[] = $requestId;
+        }
 
         // Add URL filter
         if (!empty($url)) {

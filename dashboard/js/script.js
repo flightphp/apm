@@ -687,6 +687,7 @@ function setupFilterHandlers() {
         const url = document.getElementById('filter-url').value.trim();
         const responseCode = filterResponseCode.value;
         const exactCode = filterExactCode.value.trim();
+        const requestId = document.getElementById('filter-request-id').value.trim();
         const bot = document.getElementById('filter-bot').value;
         const customEvent = document.getElementById('filter-custom-event').value.trim();
         const minTime = document.getElementById('filter-min-time').value.trim();
@@ -696,6 +697,7 @@ function setupFilterHandlers() {
         
         // Add non-empty filters to the activeFilters object
         if (url) activeFilters.url = url;
+        if (requestId) activeFilters.request_id = requestId;
         
         if (responseCode === 'exact' && exactCode) {
             activeFilters.response_code = exactCode;
@@ -723,6 +725,7 @@ function setupFilterHandlers() {
         document.getElementById('filter-url').value = '';
         filterResponseCode.value = '';
         filterExactCode.value = '';
+        document.getElementById('filter-request-id').value = '';
         document.getElementById('filter-bot').value = '';
         document.getElementById('filter-custom-event').value = '';
         document.getElementById('filter-min-time').value = '';
@@ -760,6 +763,9 @@ function setupFilterHandlers() {
             switch (key) {
                 case 'url':
                     filterLabel = `URL: ${value}`;
+                    break;
+                case 'request_id':
+                    filterLabel = `Request ID: ${value}`;
                     break;
                 case 'response_code':
                     filterLabel = `Code: ${value}`;

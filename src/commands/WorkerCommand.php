@@ -213,7 +213,9 @@ class WorkerCommand extends AbstractBaseCommand
                                 break;
                             }
                         } catch (\Exception $e) {
-                            $io->red("Failed! {$e->getMessage()}", true);
+                            $io->red("Failed to process metric ID {$metric['id']}: {$e->getMessage()}", true);
+                            // Add to processed IDs to delete the erroneous metric
+                            $processedIds[] = $metric['id'];
                             // Continue with other messages
                         }
                     }

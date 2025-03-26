@@ -147,6 +147,10 @@
 											<input type="number" class="form-control" id="filter-exact-code" placeholder="e.g. 404">
 										</div>
 										<div class="col-md-3">
+											<label for="filter-request-id" class="form-label">Request ID</label>
+											<input type="text" class="form-control" id="filter-request-id" placeholder="e.g. req_1234abcd">
+										</div>
+										<div class="col-md-3">
 											<label for="filter-bot" class="form-label">Bot Requests</label>
 											<select class="form-select" id="filter-bot">
 												<option value="">Any</option>
