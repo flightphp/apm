@@ -1,7 +1,7 @@
 {
     "name": "flightphp/apm",
     "type": "library",
-    "description": "High Performance Application Performance Monitoring (APM) for FlightPHP",
+    "description": "High-Performance Application Performance Monitoring (APM) for Flight PHP for better observability in your applications.",
     "keywords": [
 		"flight",
 		"apm",
@@ -9,6 +9,7 @@
 		"simple",
 		"lightweight",
 		"application",
+		"observability",
 		"performance",
 		"monitoring",
 		"monitor",
@@ -17,7 +18,7 @@
 		"application performance monitor",
 		"application performance monitoring"
 	],
-    "homepage": "https://docs.flightphp.com",
+    "homepage": "https://docs.flightphp.com/awesome-plugins/apm",
     "license": "MIT",
 	"authors": [
         {
