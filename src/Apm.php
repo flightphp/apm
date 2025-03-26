@@ -49,6 +49,16 @@ class Apm
     }
 
 	/**
+	 * Generates a unique request ID.
+	 * 
+	 * @return string
+	 */
+	public function generateRequestId(): string
+	{
+		return uniqid('req_', true);
+	}
+
+	/**
 	 * Registers the events for the application performance monitoring (APM) system.
 	 *
 	 * This method sets up the necessary event listeners and handlers to monitor
@@ -80,7 +90,17 @@ class Apm
 		$this->metrics['is_bot'] = false;
         $dispatcher = $app->eventDispatcher();
 
-        $dispatcher->on('flight.request.received', function (Request $request) {
+        $dispatcher->on('flight.request.received', function (Request $request) use ($app) {
+			// Generate request ID early and store it
+			$requestId = $this->generateRequestId();
+			$this->metrics['request_id'] = $requestId;
+
+			// Make request ID accessible on the request object
+			$app->response()->setHeader('X-Flight-Request-Id', $requestId);
+
+			// Register in Flight's shared variable space for easy access
+			$app->set('apm.request_id', $requestId);
+
             $this->metrics['start_time'] = microtime(true);
             $this->metrics['start_memory'] = memory_get_usage();
 			$this->metrics['request_method'] = $request->method;
@@ -221,5 +241,15 @@ class Apm
 		}
 
 		return false;
+	}
+
+	/**
+	 * Gets the current request ID.
+	 * 
+	 * @return string|null The request ID or null if not set.
+	 */
+	public function getRequestId(): ?string
+	{
+		return $this->metrics['request_id'] ?? null;
 	}
 }
