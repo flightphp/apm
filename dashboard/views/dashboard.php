@@ -57,6 +57,18 @@
 
         <div class="row g-4">
 
+			<!-- Response Code Distribution -->
+            <div class="col-md-12 col-lg-12">
+                <div class="card">
+                    <div class="card-header d-flex align-items-center">
+                        <i class="bi bi-pie-chart me-2" style="color: var(--badge-primary)"></i> Response Code Distribution
+                    </div>
+                    <div class="card-body">
+                        <canvas id="responseCodeChart" height="100"></canvas>
+                    </div>
+                </div>
+            </div>
+
 			<!-- Request Log Section -->
 			<div class="col-12 mt-4">
 				<div class="card">
@@ -75,6 +87,7 @@
 										<th>Request URL</th>
 										<th>Total Time (ms)</th>
 										<th>Response Code</th>
+										<th>Bot</th>
 										<th>Details</th>
 									</tr>
 								</thead>
@@ -125,18 +138,6 @@
                     </div>
                     <div class="card-body">
                         <h5 class="text-center" id="error-rate"></h5>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Response Code Distribution -->
-            <div class="col-md-12 col-lg-12">
-                <div class="card">
-                    <div class="card-header d-flex align-items-center">
-                        <i class="bi bi-pie-chart me-2" style="color: var(--badge-primary)"></i> Response Code Distribution
-                    </div>
-                    <div class="card-body">
-                        <canvas id="responseCodeChart" height="150"></canvas>
                     </div>
                 </div>
             </div>

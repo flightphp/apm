@@ -362,12 +362,18 @@ function populateRequestLog(requests) {
         const urlTooLong = r.request_url.length > 40;
         const urlCellClass = urlTooLong ? 'truncated-url' : '';
         
+        // Format bot status with badge
+        const botStatus = r.is_bot == 1 ? 
+            '<span class="badge bg-warning">Yes</span>' : 
+            '<span class="badge bg-secondary">No</span>';
+        
         return `
             <tr>
                 <td>${formattedTimestamp}</td>
                 <td class="${urlCellClass}" data-full-url="${r.request_url}">${r.request_url}</td>
                 <td>${time.toFixed(3)} ms</td>
                 <td>${r.response_code}</td>
+                <td>${botStatus}</td>
                 <td>
                 <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#request-details-${index}" aria-expanded="false" aria-controls="request-details-${index}">
                     Details
@@ -419,16 +425,37 @@ function updatePagination(pagination) {
 
 // Draw charts with data
 function drawCharts(data) {
+    const MAX_X_AXIS_POINTS = 20;
+    const currentRange = rangeSelector.value;
+    
+    // Sample data points to limit x-axis labels based on range
+    let chartData = data.chartData;
+    let responseData = data.responseCodeOverTime;
+    
+    // Apply sampling for longer time ranges
+    if ((currentRange === 'last_day' || currentRange === 'last_week') && chartData.length > MAX_X_AXIS_POINTS) {
+        // Calculate sampling interval
+        const samplingInterval = Math.ceil(chartData.length / MAX_X_AXIS_POINTS);
+        
+        // Sample the latency chart data
+        chartData = chartData.filter((_, index) => index % samplingInterval === 0);
+        
+        // Sample the response code distribution data 
+        responseData = responseData.filter((_, index) => index % samplingInterval === 0);
+        
+        console.log(`Sampling data with interval ${samplingInterval}, reduced from ${data.chartData.length} to ${chartData.length} points`);
+    }
+    
     // Latency Chart
     const ctxLatency = document.getElementById('latencyChart').getContext('2d');
     if (latencyChart) latencyChart.destroy();
     latencyChart = new Chart(ctxLatency, {
         type: 'line',
         data: {
-            labels: data.chartData.map(d => d.timestamp),
+            labels: chartData.map(d => d.timestamp),
             datasets: [{
                 label: 'Average Latency (ms)',
-                data: data.chartData.map(d => d.average_time * 1000),
+                data: chartData.map(d => d.average_time * 1000),
                 borderColor: '#0d6efd',
                 backgroundColor: 'rgba(13, 110, 253, 0.1)',
                 fill: true,
@@ -437,7 +464,13 @@ function drawCharts(data) {
         },
         options: {
             scales: {
-                x: { title: { display: true, text: 'Time' } },
+                x: { 
+                    title: { display: true, text: 'Time' },
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 45
+                    }
+                },
                 y: { 
                     title: { display: true, text: 'Latency (ms)' }, 
                     beginAtZero: true,
@@ -448,6 +481,14 @@ function drawCharts(data) {
                 legend: {
                     display: true,
                     position: 'top',
+                },
+                tooltip: {
+                    callbacks: {
+                        title: function(tooltipItems) {
+                            // Format the timestamp in the tooltip
+                            return formatTimestamp(tooltipItems[0].label);
+                        }
+                    }
                 }
             }
         }
@@ -458,7 +499,7 @@ function drawCharts(data) {
     if (responseCodeChart) responseCodeChart.destroy();
 
     // Extract all unique response codes
-    const responseCodes = [...new Set(data.responseCodeOverTime.flatMap(d => Object.keys(d).filter(k => k !== 'timestamp')))];
+    const responseCodes = [...new Set(responseData.flatMap(d => Object.keys(d).filter(k => k !== 'timestamp')))];
     
     // Create datasets for each response code
     const datasets = responseCodes.map(code => {
@@ -476,7 +517,7 @@ function drawCharts(data) {
 
         return {
             label: `Code ${code}`,
-            data: data.responseCodeOverTime.map(d => d[code] || 0),
+            data: responseData.map(d => d[code] || 0),
             backgroundColor: color,
             borderWidth: 1,
         };
@@ -485,7 +526,7 @@ function drawCharts(data) {
     responseCodeChart = new Chart(ctxResponse, {
         type: 'bar',
         data: {
-            labels: data.responseCodeOverTime.map(d => d.timestamp),
+            labels: responseData.map(d => d.timestamp),
             datasets: datasets
         },
         options: {
@@ -493,6 +534,10 @@ function drawCharts(data) {
                 x: { 
                     title: { display: true, text: 'Time' },
                     stacked: true,
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 45
+                    }
                 },
                 y: { 
                     title: { display: true, text: 'Request Count' },
@@ -503,6 +548,14 @@ function drawCharts(data) {
             plugins: {
                 legend: {
                     position: 'bottom',
+                },
+                tooltip: {
+                    callbacks: {
+                        title: function(tooltipItems) {
+                            // Format the timestamp in the tooltip
+                            return formatTimestamp(tooltipItems[0].label);
+                        }
+                    }
                 }
             }
         }
