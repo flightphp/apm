@@ -444,7 +444,16 @@ function updatePagination(pagination) {
     // Update pagination info
     const start = (currentPage - 1) * perPage + 1;
     const end = Math.min(currentPage * perPage, pagination.totalRequests);
-    document.getElementById('pagination-info').textContent = `Showing ${start} to ${end} of ${pagination.totalRequests} requests`;
+    
+    // Create the pagination info message
+    let paginationInfoText = `Showing ${start} to ${end} of ${pagination.totalRequests} requests`;
+    
+    // Add a note about the 500 limit if we're hitting it
+    if (pagination.totalRequests >= 500) {
+        paginationInfoText += ` <span class="text-warning" title="Only the most recent 500 matching requests are displayed. Use more specific filters to narrow your results."><i class="bi bi-info-circle"></i> (maximum limit - refine filters for more specific results)</span>`;
+    }
+    
+    document.getElementById('pagination-info').innerHTML = paginationInfoText;
 
     // Update pagination buttons
     const prevPage = document.getElementById('prev-page');
