@@ -10,6 +10,56 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <!-- Custom Styles -->
     <link href="/css/style.css" rel="stylesheet">
+    <style>
+        /* Additional styles for JSON formatting */
+        .json-container {
+            background-color: var(--bs-dark);
+            border-radius: 4px;
+            padding: 10px;
+            color: var(--bs-light);
+            font-family: monospace;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+        
+        .json-key {
+            color: #9cdcfe;
+        }
+        
+        .json-string {
+            color: #ce9178;
+        }
+        
+        .json-number {
+            color: #b5cea8;
+        }
+        
+        .json-boolean {
+            color: #569cd6;
+        }
+        
+        .json-null {
+            color: #569cd6;
+        }
+        
+        /* Dark mode adjustments */
+        [data-theme="dark"] .json-container {
+            background-color: #1e1e1e;
+        }
+        
+        /* Style for the details row */
+        tr.details-row {
+            background-color: rgba(0,0,0,0.02);
+        }
+        
+        tr.details-row > td {
+            padding: 0;
+        }
+        
+        [data-theme="dark"] tr.details-row {
+            background-color: rgba(255,255,255,0.05);
+        }
+    </style>
 </head>
 <body>
     <div class="container py-5">
@@ -57,18 +107,6 @@
 
         <div class="row g-4">
 
-			<!-- Response Code Distribution -->
-            <div class="col-md-12 col-lg-12">
-                <div class="card">
-                    <div class="card-header d-flex align-items-center">
-                        <i class="bi bi-pie-chart me-2" style="color: var(--badge-primary)"></i> Response Code Distribution
-                    </div>
-                    <div class="card-body">
-                        <canvas id="responseCodeChart" height="100"></canvas>
-                    </div>
-                </div>
-            </div>
-
 			<!-- Request Log Section -->
 			<div class="col-12 mt-4">
 				<div class="card">
@@ -77,7 +115,66 @@
 					</div>
 					<div class="card-body">
 						<div class="mb-3">
-							<input type="text" id="request-search" class="form-control" placeholder="Search by URL, Response Code, or Custom Event Type...">
+
+							<div style="height: 200px;">
+								<canvas id="responseCodeChart"></canvas>
+							</div>
+							
+							<button class="btn btn-sm btn-outline-secondary mb-2" type="button" data-bs-toggle="collapse" data-bs-target="#filter-panel" aria-expanded="false">
+								<i class="bi bi-funnel"></i> Filters
+							</button>
+							
+							<div class="collapse mb-3" id="filter-panel">
+								<div class="card card-body">
+									<div class="row g-3">
+										<div class="col-md-6">
+											<label for="filter-url" class="form-label">URL Contains</label>
+											<input type="text" class="form-control" id="filter-url" placeholder="Filter by URL path...">
+										</div>
+										<div class="col-md-3">
+											<label for="filter-response-code" class="form-label">Response Code</label>
+											<select class="form-select" id="filter-response-code">
+												<option value="">Any</option>
+												<option value="2">2xx (Success)</option>
+												<option value="3">3xx (Redirect)</option>
+												<option value="4">4xx (Client Error)</option>
+												<option value="5">5xx (Server Error)</option>
+												<option value="exact">Exact Code...</option>
+											</select>
+										</div>
+										<div class="col-md-3" id="exact-code-container" style="display: none;">
+											<label for="filter-exact-code" class="form-label">Exact Code</label>
+											<input type="number" class="form-control" id="filter-exact-code" placeholder="e.g. 404">
+										</div>
+										<div class="col-md-3">
+											<label for="filter-bot" class="form-label">Bot Requests</label>
+											<select class="form-select" id="filter-bot">
+												<option value="">Any</option>
+												<option value="1">Yes</option>
+												<option value="0">No</option>
+											</select>
+										</div>
+										<div class="col-md-6">
+											<label for="filter-custom-event" class="form-label">Custom Event Type</label>
+											<input type="text" class="form-control" id="filter-custom-event" placeholder="Filter by event type...">
+										</div>
+										<div class="col-md-3">
+											<label for="filter-min-time" class="form-label">Min Time (ms)</label>
+											<input type="number" class="form-control" id="filter-min-time" placeholder="e.g. 100">
+										</div>
+										<div class="col-12 text-end">
+											<button type="button" class="btn btn-primary" id="apply-filters">Apply Filters</button>
+											<button type="button" class="btn btn-outline-secondary" id="clear-filters">Clear Filters</button>
+										</div>
+									</div>
+								</div>
+							</div>
+
+							
+							<div id="active-filters" class="mb-2 d-none">
+								<span class="fw-bold me-2">Active filters:</span>
+								<div class="d-inline-block" id="active-filters-list"></div>
+							</div>
 						</div>
 						<div class="table-responsive">
 							<table class="table table-hover">
@@ -200,6 +297,6 @@
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Dashboard Logic -->
-    <script src="/js/script.js"></script>
+    <script src="/js/script.js?ver=1"></script>
 </body>
 </html>

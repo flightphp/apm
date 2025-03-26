@@ -77,7 +77,7 @@ class SqlitePresenter implements PresenterInterface
         // Set interval based on the selected time range
         switch ($range) {
             case 'last_day':
-                $interval = 1800; // 30 minutes (60 * 30)
+                $interval = 900; // 15 minutes (reduced from 30 minutes for more granularity)
                 break;
             case 'last_week':
                 $interval = 21600; // 6 hours (60 * 60 * 6)
@@ -102,11 +102,20 @@ class SqlitePresenter implements PresenterInterface
         }
         $responseCodeOverTime = [];
         $allCodes = array_unique(array_column($requestData, 'response_code'));
-        foreach ($responseCodeData as $bucket => $codes) {
+        
+        // Ensure we have entries for all time buckets in the selected period
+        // This prevents gaps in the visualization
+        $timeStart = strtotime($threshold);
+        $timeEnd = time();
+        
+        for ($bucket = $timeStart - ($timeStart % $interval); $bucket <= $timeEnd; $bucket += $interval) {
             $entry = ['timestamp' => date('Y-m-d H:i:s', $bucket)];
+            
+            // Initialize all response codes to zero for this bucket
             foreach ($allCodes as $code) {
-                $entry[$code] = $codes[$code] ?? 0;
+                $entry[$code] = isset($responseCodeData[$bucket][$code]) ? $responseCodeData[$bucket][$code] : 0;
             }
+            
             $responseCodeOverTime[] = $entry;
         }
 
@@ -166,39 +175,72 @@ class SqlitePresenter implements PresenterInterface
         // Check if database supports JSON functions
         $hasJsonFunctions = $this->databaseSupportsJson();
 
-        // Custom search handling - determine if we need to search in custom events
-		$search = trim($search);
-        $searchInCustomEvents = !empty($search);
+        // Extract filter parameters from the search string or use directly provided parameters
+        $url = $_GET['url'] ?? '';
+        $responseCode = $_GET['response_code'] ?? '';
+        $responseCodePrefix = $_GET['response_code_prefix'] ?? '';
+        $isBot = $_GET['is_bot'] ?? '';
+        $customEventType = $_GET['custom_event_type'] ?? '';
+        $minTime = $_GET['min_time'] ?? '';
         
-        // Get all matching request IDs based on URL and response code, limited to 500
-        $urlResponseCodeQuery = 'SELECT request_id FROM apm_requests WHERE timestamp >= ? ORDER BY timestamp DESC LIMIT ?';
-        $urlResponseParams = [$threshold, $maxRequests];
-        if ($search) {
-            $urlResponseCodeQuery = 'SELECT request_id FROM apm_requests WHERE timestamp >= ? AND (request_url LIKE ? OR response_code LIKE ?) ORDER BY timestamp DESC LIMIT ?';
-            $urlResponseParams = [$threshold, "%$search%", "%$search%", $maxRequests];
+        // Build main query with conditions for URL and response code
+        $conditions = ['timestamp >= ?'];
+        $params = [$threshold];
+
+        // Add URL filter
+        if (!empty($url)) {
+            $conditions[] = 'request_url LIKE ?';
+            $params[] = "%$url%";
         }
 
+        // Add response code filter
+        if (!empty($responseCode)) {
+            $conditions[] = 'response_code = ?';
+            $params[] = $responseCode;
+        } elseif (!empty($responseCodePrefix)) {
+            $conditions[] = 'response_code LIKE ?';
+            $params[] = "$responseCodePrefix%";
+        }
+
+        // Add bot filter
+        if ($isBot !== '' && ($isBot === '0' || $isBot === '1')) {
+            $conditions[] = 'is_bot = ?';
+            $params[] = $isBot;
+        }
+
+        // Add min time filter
+        if (!empty($minTime) && is_numeric($minTime)) {
+            // Convert from milliseconds to seconds for DB comparison
+            $minTimeSeconds = floatval($minTime) / 1000;
+            $conditions[] = 'total_time >= ?';
+            $params[] = $minTimeSeconds;
+        }
+
+        // Build the base query with all conditions
+        $whereClause = implode(' AND ', $conditions);
+        $urlResponseCodeQuery = "SELECT request_id FROM apm_requests WHERE $whereClause ORDER BY timestamp DESC LIMIT ?";
+        $params[] = $maxRequests;
+
         $stmt = $this->db->prepare($urlResponseCodeQuery);
-        $stmt->execute($urlResponseParams);
+        $stmt->execute($params);
         $mainRequestIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-        // Get request IDs from custom events if we're searching
+        // Get request IDs from custom events if custom event type filter is set
         $customEventRequestIds = [];
-        if ($searchInCustomEvents) {
+        if (!empty($customEventType)) {
             // Try to use JSON functions if available
             if ($hasJsonFunctions) {
                 // SQLite JSON functions
                 $customEventsQuery = "SELECT request_id FROM apm_custom_events 
                     WHERE event_type LIKE ? 
-                    OR json_extract(event_data, '$') LIKE ?
                     LIMIT ?";
                 $stmt = $this->db->prepare($customEventsQuery);
-                $stmt->execute(["%$search%", "%$search%", $maxRequests]);
+                $stmt->execute(["%$customEventType%", $maxRequests]);
             } else {
                 // Fallback: Search only in event_type
                 $customEventsQuery = "SELECT request_id FROM apm_custom_events WHERE event_type LIKE ? LIMIT ?";
                 $stmt = $this->db->prepare($customEventsQuery);
-                $stmt->execute(["%$search%", $maxRequests]);
+                $stmt->execute(["%$customEventType%", $maxRequests]);
             }
             $customEventRequestIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
         }
@@ -256,6 +298,71 @@ class SqlitePresenter implements PresenterInterface
         }
         unset($request);
 
+        // After fetching the requests and before returning the result
+        // Calculate response code distribution for the filtered requests
+        $responseCodeDist = [];
+        $range = $_GET['range'] ?? 'last_hour';
+        
+        // Set interval based on the selected time range
+        switch ($range) {
+            case 'last_day':
+                $interval = 900; // 15 minutes (reduced from 30 minutes for more granularity)
+                break;
+            case 'last_week':
+                $interval = 21600; // 6 hours
+                break;
+            case 'last_hour':
+            default:
+                $interval = 300; // 5 minutes
+                break;
+        }
+        
+        // If we have unique request IDs, get their response code distribution
+        if (!empty($uniqueRequestIds)) {
+            // For a more comprehensive view, we need to get ALL requests from the selected time range
+            // not just the filtered ones for the response distribution graph
+            $stmt = $this->db->prepare("SELECT timestamp, response_code FROM apm_requests 
+                WHERE timestamp >= ? ORDER BY timestamp");
+            $stmt->execute([$threshold]);
+            $filteredRequestData = $stmt->fetchAll();
+            
+            $responseCodeData = [];
+            
+            foreach ($filteredRequestData as $row) {
+                $timestamp = strtotime($row['timestamp']);
+                $bucket = floor($timestamp / $interval) * $interval;
+                $code = $row['response_code'];
+                if (!isset($responseCodeData[$bucket])) {
+                    $responseCodeData[$bucket] = [];
+                }
+                if (!isset($responseCodeData[$bucket][$code])) {
+                    $responseCodeData[$bucket][$code] = 0;
+                }
+                $responseCodeData[$bucket][$code]++;
+            }
+            
+            $responseCodeOverTime = [];
+            $allCodes = array_unique(array_column($filteredRequestData, 'response_code'));
+            
+            // Ensure we have entries for all time buckets in the selected period
+            // This prevents gaps in the visualization
+            $timeStart = strtotime($threshold);
+            $timeEnd = time();
+            
+            for ($bucket = $timeStart - ($timeStart % $interval); $bucket <= $timeEnd; $bucket += $interval) {
+                $entry = ['timestamp' => date('Y-m-d H:i:s', $bucket)];
+                
+                // Initialize all response codes to zero for this bucket
+                foreach ($allCodes as $code) {
+                    $entry[$code] = isset($responseCodeData[$bucket][$code]) ? $responseCodeData[$bucket][$code] : 0;
+                }
+                
+                $responseCodeOverTime[] = $entry;
+            }
+            
+            $responseCodeDist = $responseCodeOverTime;
+        }
+
         return [
             'requests' => $requests,
             'pagination' => [
@@ -263,7 +370,8 @@ class SqlitePresenter implements PresenterInterface
                 'totalPages' => $totalPages,
                 'perPage' => $perPage,
                 'totalRequests' => $totalRequests,
-            ]
+            ],
+            'responseCodeDistribution' => $responseCodeDist
         ];
     }
 

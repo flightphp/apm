@@ -6,10 +6,10 @@ let isDarkMode = localStorage.getItem('darkMode') === 'true';
 let currentPage = 1;
 let totalPages = 1;
 let perPage = 50;
-let searchTerm = '';
+let activeFilters = {}; // New object to store all active filters
 let dashboardData = null;
 let latencyChart, responseCodeChart;
-let searchDebounceTimer = null;
+let filterDebounceTimer = null;
 const DEBOUNCE_DELAY = 300; // milliseconds
 let selectedTimezone = localStorage.getItem('selectedTimezone') || 'UTC';
 
@@ -110,7 +110,20 @@ function loadDashboardData() {
 // Function to load only request log data
 function loadRequestLogData() {
     const range = rangeSelector.value;
-    fetch(`/apm/data/requests?range=${range}&page=${currentPage}&search=${encodeURIComponent(searchTerm)}`)
+    
+    // Build query params from all active filters
+    const queryParams = new URLSearchParams();
+    queryParams.append('range', range);
+    queryParams.append('page', currentPage);
+    
+    // Add each active filter to the query params
+    Object.entries(activeFilters).forEach(([key, value]) => {
+        if (value !== null && value !== '') {
+            queryParams.append(key, value);
+        }
+    });
+    
+    fetch(`/apm/data/requests?${queryParams.toString()}`)
         .then(response => {
             if (!response.ok) throw new Error('Network response was not ok');
             return response.json();
@@ -119,6 +132,14 @@ function loadRequestLogData() {
             console.log('Request log data received:', data);
             populateRequestLog(data.requests);
             updatePagination(data.pagination);
+            
+            // Update the response code distribution chart with filtered data
+            if (data.responseCodeDistribution && data.responseCodeDistribution.length > 0) {
+                updateResponseCodeChart(data.responseCodeDistribution);
+            } else if (Object.keys(activeFilters).length > 0) {
+                // If we have active filters but no matching data, show empty chart
+                updateResponseCodeChart([]);
+            }
         })
         .catch(error => console.error('Error loading request log data:', error));
 }
@@ -367,6 +388,13 @@ function populateRequestLog(requests) {
             '<span class="badge bg-warning">Yes</span>' : 
             '<span class="badge bg-secondary">No</span>';
         
+        // Create a complete copy of the request data for JSON display
+        const requestJson = { ...r };
+        
+        // Create a unique ID for the details row
+        const detailsRowId = `request-details-row-${index}`;
+        
+        // Return two table rows - one for the request data and one for details (initially hidden)
         return `
             <tr>
                 <td>${formattedTimestamp}</td>
@@ -375,17 +403,35 @@ function populateRequestLog(requests) {
                 <td>${r.response_code}</td>
                 <td>${botStatus}</td>
                 <td>
-                <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#request-details-${index}" aria-expanded="false" aria-controls="request-details-${index}">
-                    Details
-                </button>
-                <div class="collapse mt-2" id="request-details-${index}">
-                    <div class="card card-body">
-                    ${detailSections.join('')}
-                    </div>
-                </div>
+                    <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" 
+                            data-bs-target="#${detailsRowId}" aria-expanded="false" aria-controls="${detailsRowId}">
+                        Details
+                    </button>
                 </td>
             </tr>
-            `;
+            <tr class="details-row collapse" id="${detailsRowId}">
+                <td colspan="6">
+                    <div class="p-3">
+                        <div class="card card-body">
+                            <div class="row">
+                                <!-- JSON representation on the left -->
+                                <div class="col-md-7">
+                                    <h6 class="border-bottom pb-1">Raw Request Data</h6>
+                                    <div class="json-container" style="max-height: 500px; overflow-y: auto;">
+                                        <pre class="json-formatter">${formatJson(requestJson)}</pre>
+                                    </div>
+                                </div>
+                                
+                                <!-- Structured sections on the right -->
+                                <div class="col-md-5">
+                                    ${detailSections.join('')}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        `;
     }).join('');
 }
 
@@ -425,12 +471,11 @@ function updatePagination(pagination) {
 
 // Draw charts with data
 function drawCharts(data) {
-    const MAX_X_AXIS_POINTS = 20;
+    const MAX_X_AXIS_POINTS = 40; // Increased from 20 to show more granularity for day view
     const currentRange = rangeSelector.value;
     
     // Sample data points to limit x-axis labels based on range
     let chartData = data.chartData;
-    let responseData = data.responseCodeOverTime;
     
     // Apply sampling for longer time ranges
     if ((currentRange === 'last_day' || currentRange === 'last_week') && chartData.length > MAX_X_AXIS_POINTS) {
@@ -439,11 +484,6 @@ function drawCharts(data) {
         
         // Sample the latency chart data
         chartData = chartData.filter((_, index) => index % samplingInterval === 0);
-        
-        // Sample the response code distribution data 
-        responseData = responseData.filter((_, index) => index % samplingInterval === 0);
-        
-        console.log(`Sampling data with interval ${samplingInterval}, reduced from ${data.chartData.length} to ${chartData.length} points`);
     }
     
     // Latency Chart
@@ -494,9 +534,48 @@ function drawCharts(data) {
         }
     });
 
-    // Response Code Distribution Over Time (Stacked Bar Chart)
+    // Update Response Code Chart with dashboard data
+    updateResponseCodeChart(data.responseCodeOverTime);
+}
+
+// New function to update just the response code chart
+function updateResponseCodeChart(responseData) {
     const ctxResponse = document.getElementById('responseCodeChart').getContext('2d');
     if (responseCodeChart) responseCodeChart.destroy();
+    
+    // If no data, show empty chart with message
+    if (!responseData || responseData.length === 0) {
+        responseCodeChart = new Chart(ctxResponse, {
+            type: 'bar',
+            data: {
+                datasets: []
+            },
+            options: {
+                maintainAspectRatio: false,
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'No matching data for current filters',
+                        padding: {
+                            top: 30
+                        }
+                    }
+                }
+            }
+        });
+        return;
+    }
+    
+    // Sample data points if too many
+    const MAX_X_AXIS_POINTS = 40; // Increased from 20 to show more granularity for day view
+    const currentRange = rangeSelector.value;
+    
+    if ((currentRange === 'last_day' || currentRange === 'last_week') && responseData.length > MAX_X_AXIS_POINTS) {
+        const samplingInterval = Math.ceil(responseData.length / MAX_X_AXIS_POINTS);
+        responseData = responseData.filter((_, index) => index % samplingInterval === 0);
+        console.log(`Sampling response data with interval ${samplingInterval}, showing ${responseData.length} points`);
+    }
 
     // Extract all unique response codes
     const responseCodes = [...new Set(responseData.flatMap(d => Object.keys(d).filter(k => k !== 'timestamp')))];
@@ -530,13 +609,17 @@ function drawCharts(data) {
             datasets: datasets
         },
         options: {
+            maintainAspectRatio: false,
+            responsive: true,
             scales: {
                 x: { 
-                    title: { display: true, text: 'Time' },
+                    title: { display: false },
                     stacked: true,
                     ticks: {
-                        maxRotation: 45,
-                        minRotation: 45
+                        display: false
+                    },
+                    grid: {
+                        display: false
                     }
                 },
                 y: { 
@@ -547,12 +630,11 @@ function drawCharts(data) {
             },
             plugins: {
                 legend: {
-                    position: 'bottom',
+                    display: false,
                 },
                 tooltip: {
                     callbacks: {
                         title: function(tooltipItems) {
-                            // Format the timestamp in the tooltip
                             return formatTimestamp(tooltipItems[0].label);
                         }
                     }
@@ -583,15 +665,140 @@ timezoneSelector.addEventListener('change', () => {
     loadRequestLogData();
 });
 
-// Search functionality with debounce
-const searchInput = document.getElementById('request-search');
-searchInput.addEventListener('input', debounce(() => {
-    searchTerm = searchInput.value;
-    currentPage = 1; // Reset to first page on search
-    loadRequestLogData(); // Only reload request log data
-}, DEBOUNCE_DELAY));
+// Setup filter functionality
+function setupFilterHandlers() {
+    const filterResponseCode = document.getElementById('filter-response-code');
+    const exactCodeContainer = document.getElementById('exact-code-container');
+    const filterExactCode = document.getElementById('filter-exact-code');
+    const applyFiltersBtn = document.getElementById('apply-filters');
+    const clearFiltersBtn = document.getElementById('clear-filters');
+    const activeFiltersContainer = document.getElementById('active-filters');
+    const activeFiltersList = document.getElementById('active-filters-list');
+    
+    // Show/hide exact code input based on selection
+    filterResponseCode.addEventListener('change', () => {
+        exactCodeContainer.style.display = 
+            filterResponseCode.value === 'exact' ? 'block' : 'none';
+    });
+    
+    // Apply filters button click
+    applyFiltersBtn.addEventListener('click', () => {
+        // Collect all filter values
+        const url = document.getElementById('filter-url').value.trim();
+        const responseCode = filterResponseCode.value;
+        const exactCode = filterExactCode.value.trim();
+        const bot = document.getElementById('filter-bot').value;
+        const customEvent = document.getElementById('filter-custom-event').value.trim();
+        const minTime = document.getElementById('filter-min-time').value.trim();
+        
+        // Clear previous filters
+        activeFilters = {};
+        
+        // Add non-empty filters to the activeFilters object
+        if (url) activeFilters.url = url;
+        
+        if (responseCode === 'exact' && exactCode) {
+            activeFilters.response_code = exactCode;
+        } else if (responseCode && responseCode !== 'exact') {
+            activeFilters.response_code_prefix = responseCode;
+        }
+        
+        if (bot) activeFilters.is_bot = bot;
+        if (customEvent) activeFilters.custom_event_type = customEvent;
+        if (minTime) activeFilters.min_time = minTime;
+        
+        // Update UI to show active filters
+        updateActiveFiltersDisplay();
+        
+        // Reset to page 1 when applying new filters
+        currentPage = 1;
+        
+        // Load data with new filters
+        loadRequestLogData();
+    });
+    
+    // Clear filters button click
+    clearFiltersBtn.addEventListener('click', () => {
+        // Reset all filter inputs
+        document.getElementById('filter-url').value = '';
+        filterResponseCode.value = '';
+        filterExactCode.value = '';
+        document.getElementById('filter-bot').value = '';
+        document.getElementById('filter-custom-event').value = '';
+        document.getElementById('filter-min-time').value = '';
+        
+        // Hide the exact code input
+        exactCodeContainer.style.display = 'none';
+        
+        // Clear active filters
+        activeFilters = {};
+        
+        // Update UI
+        updateActiveFiltersDisplay();
+        
+        // Reset to page 1
+        currentPage = 1;
+        
+        // Reload data
+        loadRequestLogData();
+    });
+    
+    // Function to update the active filters display
+    function updateActiveFiltersDisplay() {
+        if (Object.keys(activeFilters).length === 0) {
+            activeFiltersContainer.classList.add('d-none');
+            return;
+        }
+        
+        activeFiltersContainer.classList.remove('d-none');
+        activeFiltersList.innerHTML = '';
+        
+        // Create filter badges
+        Object.entries(activeFilters).forEach(([key, value]) => {
+            let filterLabel;
+            
+            switch (key) {
+                case 'url':
+                    filterLabel = `URL: ${value}`;
+                    break;
+                case 'response_code':
+                    filterLabel = `Code: ${value}`;
+                    break;
+                case 'response_code_prefix':
+                    filterLabel = `Code: ${value}xx`;
+                    break;
+                case 'is_bot':
+                    filterLabel = `Bot: ${value === '1' ? 'Yes' : 'No'}`;
+                    break;
+                case 'custom_event_type':
+                    filterLabel = `Event: ${value}`;
+                    break;
+                case 'min_time':
+                    filterLabel = `Min Time: ${value}ms`;
+                    break;
+                default:
+                    filterLabel = `${key}: ${value}`;
+            }
+            
+            const badge = document.createElement('span');
+            badge.className = 'badge bg-info me-2 mb-1';
+            badge.innerHTML = `${filterLabel} <i class="bi bi-x-circle" data-filter="${key}"></i>`;
+            
+            // Add click event to remove individual filter
+            badge.querySelector('i').addEventListener('click', function() {
+                delete activeFilters[this.dataset.filter];
+                updateActiveFiltersDisplay();
+                currentPage = 1;
+                loadRequestLogData();
+            });
+            
+            activeFiltersList.appendChild(badge);
+        });
+    }
+}
 
 // Initialize dashboard on page load
 document.addEventListener('DOMContentLoaded', () => {
     loadData();
+    setupFilterHandlers();
 });
