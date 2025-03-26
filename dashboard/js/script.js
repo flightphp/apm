@@ -102,7 +102,7 @@ function loadDashboardData() {
             console.log('Dashboard data received:', data);
             dashboardData = data;
             populateWidgets(data);
-            drawCharts(data);
+            drawLatencyChart(data); // Changed from drawCharts to only draw the latency chart
         })
         .catch(error => console.error('Error loading dashboard data:', error));
 }
@@ -478,8 +478,8 @@ function updatePagination(pagination) {
     };
 }
 
-// Draw charts with data
-function drawCharts(data) {
+// Draw charts with data - renamed to drawLatencyChart and removed response code chart creation
+function drawLatencyChart(data) {
     const MAX_X_AXIS_POINTS = 40; // Increased from 20 to show more granularity for day view
     const currentRange = rangeSelector.value;
     
@@ -543,8 +543,8 @@ function drawCharts(data) {
         }
     });
 
-    // Update Response Code Chart with dashboard data
-    updateResponseCodeChart(data.responseCodeOverTime);
+    // Remove the response code chart update
+    // updateResponseCodeChart(data.responseCodeOverTime); <- This line is removed
 }
 
 // New function to update just the response code chart
@@ -816,4 +816,37 @@ function setupFilterHandlers() {
 document.addEventListener('DOMContentLoaded', () => {
     loadData();
     setupFilterHandlers();
+    
+    // Add event listener for range selector to handle sequential chart updates
+    rangeSelector.addEventListener('change', () => {
+        // Clear the response code chart immediately to avoid confusion
+        if (responseCodeChart) {
+            responseCodeChart.destroy();
+            responseCodeChart = null;
+            
+            // Show loading state in chart
+            const ctxResponse = document.getElementById('responseCodeChart').getContext('2d');
+            responseCodeChart = new Chart(ctxResponse, {
+                type: 'bar',
+                data: { datasets: [] },
+                options: {
+                    maintainAspectRatio: false,
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Loading data...',
+                            padding: { top: 30 }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Load new data
+        loadData();
+    });
+    
+    // Remove the event listener we just added to avoid duplicates
+    rangeSelector.removeEventListener('change', loadData);
 });
