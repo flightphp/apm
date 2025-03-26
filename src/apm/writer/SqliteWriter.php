@@ -109,8 +109,9 @@ class SqliteWriter implements WriterInterface
      */
     protected function storeMainMetrics(array $metrics): string
     {
-        $requestId = $this->generateRequestId();
-        
+        // Use provided request ID or generate a new one if not available
+        $requestId = $metrics['request_id'] ?? $this->generateRequestId();
+
         $stmt = $this->getStatement('
             INSERT INTO apm_requests (
                 request_id, 
@@ -125,6 +126,8 @@ class SqliteWriter implements WriterInterface
 				is_bot
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ');
+
+		$isBot = (int) $metrics['is_bot'];
         
         $stmt->execute([
             $requestId,
@@ -136,7 +139,7 @@ class SqliteWriter implements WriterInterface
             $metrics['response_code'] ?? null,
             $metrics['response_size'] ?? null,
             $metrics['response_build_time'] ?? null,
-			$metrics['is_bot'] ?? null
+			$isBot
         ]);
         
         return $requestId;
