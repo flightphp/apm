@@ -123,15 +123,19 @@ class SqliteWriter implements WriterInterface
                 response_code,
                 response_size,
                 response_build_time,
-				is_bot
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                is_bot,
+                ip,
+                user_agent,
+                host,
+                session_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ');
 
-		$isBot = (int) $metrics['is_bot'];
+        $isBot = (int) $metrics['is_bot'];
         
         $stmt->execute([
             $requestId,
-			gmdate('Y-m-d H:i:s', (int) $metrics['start_time']),
+            gmdate('Y-m-d H:i:s', (int) $metrics['start_time']),
             $metrics['request_method'] ?? null,
             $metrics['request_url'] ?? null,
             $metrics['total_time'] ?? null,
@@ -139,7 +143,11 @@ class SqliteWriter implements WriterInterface
             $metrics['response_code'] ?? null,
             $metrics['response_size'] ?? null,
             $metrics['response_build_time'] ?? null,
-			$isBot
+            $isBot,
+            $metrics['ip'] ?? null,
+            $metrics['user_agent'] ?? null,
+            $metrics['host'] ?? null,
+            $metrics['session_id'] ?? null
         ]);
         
         return $requestId;

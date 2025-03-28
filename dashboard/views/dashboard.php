@@ -166,6 +166,23 @@
 											<label for="filter-min-time" class="form-label">Min Time (ms)</label>
 											<input type="number" class="form-control" id="filter-min-time" placeholder="e.g. 100">
 										</div>
+										<!-- New metadata filters -->
+										<div class="col-md-3">
+											<label for="filter-ip" class="form-label">IP Address</label>
+											<input type="text" class="form-control" id="filter-ip" placeholder="e.g. 192.168.0.1">
+										</div>
+										<div class="col-md-3">
+											<label for="filter-host" class="form-label">Host</label>
+											<input type="text" class="form-control" id="filter-host" placeholder="e.g. example.com">
+										</div>
+										<div class="col-md-3">
+											<label for="filter-session-id" class="form-label">Session ID</label>
+											<input type="text" class="form-control" id="filter-session-id" placeholder="Filter by session...">
+										</div>
+										<div class="col-md-3">
+											<label for="filter-user-agent" class="form-label">User Agent</label>
+											<input type="text" class="form-control" id="filter-user-agent" placeholder="Contains...">
+										</div>
 										<div class="col-12 text-end">
 											<button type="button" class="btn btn-primary" id="apply-filters">Apply Filters</button>
 											<button type="button" class="btn btn-outline-secondary" id="clear-filters">Clear Filters</button>
@@ -301,6 +318,6 @@
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Dashboard Logic -->
-    <script src="/js/script.js?ver=1"></script>
+    <script src="/js/script.js?ver=2"></script>
 </body>
 </html>

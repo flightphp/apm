@@ -184,6 +184,12 @@ class SqlitePresenter implements PresenterInterface
         $minTime = $_GET['min_time'] ?? '';
         $requestId = $_GET['request_id'] ?? '';
         
+        // New metadata filters
+        $ip = $_GET['ip'] ?? '';
+        $host = $_GET['host'] ?? '';
+        $sessionId = $_GET['session_id'] ?? '';
+        $userAgent = $_GET['user_agent'] ?? '';
+        
         // Build main query with conditions for URL and response code
         $conditions = ['timestamp >= ?'];
         $params = [$threshold];
@@ -221,6 +227,27 @@ class SqlitePresenter implements PresenterInterface
             $minTimeSeconds = floatval($minTime) / 1000;
             $conditions[] = 'total_time >= ?';
             $params[] = $minTimeSeconds;
+        }
+        
+        // Add new metadata filters
+        if (!empty($ip)) {
+            $conditions[] = 'ip = ?';
+            $params[] = "$ip";
+        }
+        
+        if (!empty($host)) {
+            $conditions[] = 'host = ?';
+            $params[] = "$host";
+        }
+        
+        if (!empty($sessionId)) {
+            $conditions[] = 'session_id = ?';
+            $params[] = "$sessionId";
+        }
+        
+        if (!empty($userAgent)) {
+            $conditions[] = 'user_agent LIKE ?';
+            $params[] = "%$userAgent%";
         }
 
         // Build the base query with all conditions
