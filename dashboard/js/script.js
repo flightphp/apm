@@ -401,6 +401,7 @@ function populateRequestLog(requests) {
                 <td class="${urlCellClass}" data-full-url="${r.request_url}">${r.request_url}</td>
                 <td>${time.toFixed(3)} ms</td>
                 <td>${r.response_code}</td>
+				<td>${r.ip}</td>
                 <td>${botStatus}</td>
                 <td>
                     <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" 
@@ -701,6 +702,12 @@ function setupFilterHandlers() {
         const customEvent = document.getElementById('filter-custom-event').value.trim();
         const minTime = document.getElementById('filter-min-time').value.trim();
         
+        // New metadata filters
+        const ip = document.getElementById('filter-ip').value.trim();
+        const host = document.getElementById('filter-host').value.trim();
+        const sessionId = document.getElementById('filter-session-id').value.trim();
+        const userAgent = document.getElementById('filter-user-agent').value.trim();
+        
         // Clear previous filters
         activeFilters = {};
         
@@ -717,6 +724,12 @@ function setupFilterHandlers() {
         if (bot) activeFilters.is_bot = bot;
         if (customEvent) activeFilters.custom_event_type = customEvent;
         if (minTime) activeFilters.min_time = minTime;
+        
+        // Add new metadata filters
+        if (ip) activeFilters.ip = ip;
+        if (host) activeFilters.host = host;
+        if (sessionId) activeFilters.session_id = sessionId;
+        if (userAgent) activeFilters.user_agent = userAgent;
         
         // Update UI to show active filters
         updateActiveFiltersDisplay();
@@ -738,6 +751,12 @@ function setupFilterHandlers() {
         document.getElementById('filter-bot').value = '';
         document.getElementById('filter-custom-event').value = '';
         document.getElementById('filter-min-time').value = '';
+        
+        // Reset new metadata filters
+        document.getElementById('filter-ip').value = '';
+        document.getElementById('filter-host').value = '';
+        document.getElementById('filter-session-id').value = '';
+        document.getElementById('filter-user-agent').value = '';
         
         // Hide the exact code input
         exactCodeContainer.style.display = 'none';
@@ -790,6 +809,19 @@ function setupFilterHandlers() {
                     break;
                 case 'min_time':
                     filterLabel = `Min Time: ${value}ms`;
+                    break;
+                // Add new metadata filter labels
+                case 'ip':
+                    filterLabel = `IP: ${value}`;
+                    break;
+                case 'host':
+                    filterLabel = `Host: ${value}`;
+                    break;
+                case 'session_id':
+                    filterLabel = `Session: ${value}`;
+                    break;
+                case 'user_agent':
+                    filterLabel = `User Agent: ${value}`;
                     break;
                 default:
                     filterLabel = `${key}: ${value}`;

@@ -105,9 +105,17 @@ class Apm
             $this->metrics['start_memory'] = memory_get_usage();
 			$this->metrics['request_method'] = $request->method;
 			$this->metrics['request_url'] = $request->url;
+			$this->metrics['ip'] = $request->proxy_ip ?: $request->ip;
+			$this->metrics['user_agent'] = $request->user_agent ?? '';
+			$this->metrics['host'] = $request->host ?? '';
+			if(function_exists('session_id')) {
+				$this->metrics['session_id'] = session_status() === PHP_SESSION_ACTIVE ? session_id() : null;
+			} else {
+				$this->metrics['session_id'] = null;
+			}
 
 			// Check if the request is from a bot
-			$userAgent = $request->headers['User-Agent'] ?? '';
+			$userAgent = $request->user_agent ?? '';
 			$this->metrics['is_bot'] = $this->isBot($userAgent);
         });
 
@@ -176,6 +184,7 @@ class Apm
 			// are logged, while a value of 0.1 means only 10% of requests are logged.
 			if (rand(0, 9999) / 10000 <= $this->sampleRate) {
 				foreach($this->pdoConnections as $pdo) {
+					/** @var PdoWrapper $pdo */
 					if(method_exists($pdo, 'logQueries')) {
 						$pdo->logQueries();
 					}
