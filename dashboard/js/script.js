@@ -401,6 +401,7 @@ function populateRequestLog(requests) {
                 <td class="${urlCellClass}" data-full-url="${r.request_url}">${r.request_url}</td>
                 <td>${time.toFixed(3)} ms</td>
                 <td>${r.response_code}</td>
+				<td>${r.ip}</td>
                 <td>${botStatus}</td>
                 <td>
                     <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" 

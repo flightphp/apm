@@ -319,7 +319,7 @@ class SqlitePresenter implements PresenterInterface
         $placeholders = implode(',', array_fill(0, count($paginatedRequestIds), '?'));
         
         // Get the actual request data
-        $requestQuery = "SELECT request_id, timestamp, request_url, total_time, response_code, is_bot FROM apm_requests 
+        $requestQuery = "SELECT request_id, timestamp, request_url, total_time, response_code, is_bot, ip, user_agent, host, session_id FROM apm_requests 
             WHERE request_id IN ($placeholders) ORDER BY timestamp DESC";
         $stmt = $this->db->prepare($requestQuery);
         $stmt->execute($paginatedRequestIds);

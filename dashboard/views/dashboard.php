@@ -205,6 +205,7 @@
 										<th>Request URL</th>
 										<th>Total Time (ms)</th>
 										<th>Response Code</th>
+										<th>IP</th>
 										<th>Bot</th>
 										<th>Details</th>
 									</tr>
