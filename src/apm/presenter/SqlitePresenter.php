@@ -126,28 +126,29 @@ class SqlitePresenter implements PresenterInterface
         $p95 = $this->calculatePercentile($times, 95);
         $p99 = $this->calculatePercentile($times, 99);
 
-        // Graph Data (aggregated)
-        $stmt = $this->db->prepare('SELECT timestamp, total_time FROM apm_requests WHERE timestamp >= ? ORDER BY timestamp');
-        $stmt->execute([$threshold]);
-        $requestData = $stmt->fetchAll();
-        $aggregatedData = [];
+        // Graph Data (aggregated) - Optimized for large datasets
+        // Use SQLite's strftime to group by time intervals directly in SQL
+        $intervalSeconds = $interval;
+        $stmt = $this->db->prepare("
+            SELECT 
+                (strftime('%s', timestamp) / ?) * ? as time_bucket,
+                AVG(total_time) as average_time,
+                COUNT(*) as request_count
+            FROM apm_requests 
+            WHERE timestamp >= ? 
+            GROUP BY time_bucket
+            ORDER BY time_bucket
+        ");
+        $stmt->execute([$intervalSeconds, $intervalSeconds, $threshold]);
+        $aggregatedData = $stmt->fetchAll();
         
-        // Use the same interval for consistent visualization
-        foreach ($requestData as $row) {
-            $timestamp = strtotime($row['timestamp']);
-            $bucket = floor($timestamp / $interval) * $interval;
-            if (!isset($aggregatedData[$bucket])) {
-                $aggregatedData[$bucket] = ['sum' => 0, 'count' => 0];
-            }
-            $aggregatedData[$bucket]['sum'] += $row['total_time'];
-            $aggregatedData[$bucket]['count']++;
-        }
-        $chartData = array_map(function($bucket, $data) {
+        $chartData = array_map(function($row) {
             return [
-                'timestamp' => date('Y-m-d H:i:s', (int) $bucket),
-                'average_time' => $data['sum'] / $data['count'],
+                'timestamp' => date('Y-m-d H:i:s', (int) $row['time_bucket']),
+                'average_time' => $row['average_time'],
+                'request_count' => $row['request_count']
             ];
-        }, array_keys($aggregatedData), $aggregatedData);
+        }, $aggregatedData);
 
         return [
             'slowRequests' => $slowRequests,
@@ -320,7 +321,7 @@ class SqlitePresenter implements PresenterInterface
         
         // Get the actual request data
         $requestQuery = "SELECT request_id, timestamp, request_url, total_time, response_code, is_bot, ip, user_agent, host, session_id FROM apm_requests 
-            WHERE request_id IN ($placeholders) ORDER BY timestamp DESC";
+            WHERE request_id IN ($placeholders) ORDER BY id DESC";
         $stmt = $this->db->prepare($requestQuery);
         $stmt->execute($paginatedRequestIds);
         $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
