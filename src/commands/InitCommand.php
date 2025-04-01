@@ -161,8 +161,12 @@ class InitCommand extends AbstractBaseCommand
             $config['apm'] = [];
         }
 
-		$config['apm'] = $apmConfig;
-        
+        // Add option for masking IP addresses
+        $maskIp = $io->prompt('Do you want to mask IP addresses in the dashboard? (y/n)', 'n');
+        $apmConfig['mask_ip_addresses'] = strtolower($maskIp) === 'y';
+
+        $config['apm'] = $apmConfig;
+
         $json = json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
         file_put_contents($configFile, $json);
         

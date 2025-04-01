@@ -330,6 +330,11 @@ class SqlitePresenter implements PresenterInterface
         foreach ($requests as &$request) {
             $details = $this->getRequestDetails($request['request_id']);
             $request = array_merge($request, $details);
+
+            // Mask IP address if the option is enabled
+            if ($this->shouldMaskIpAddresses()) {
+                $request['ip'] = $this->maskIpAddress($request['ip']);
+            }
         }
         unset($request);
 
@@ -454,6 +459,11 @@ class SqlitePresenter implements PresenterInterface
         
         $request['custom_events'] = $events;
         
+        // Mask IP address if the option is enabled
+        if ($this->shouldMaskIpAddresses() && isset($request['ip'])) {
+            $request['ip'] = $this->maskIpAddress($request['ip']);
+        }
+
         return $request;
     }
 
@@ -489,5 +499,44 @@ class SqlitePresenter implements PresenterInterface
         } catch (\Exception $e) {
             return false;
         }
+    }
+
+    /**
+     * Check if IP addresses should be masked
+     *
+     * @return bool
+     */
+    protected function shouldMaskIpAddresses(): bool
+    {
+        // Assuming the configuration is accessible via $this->config
+        return $this->config['apm']['mask_ip_addresses'] ?? false;
+    }
+
+    /**
+     * Mask an IP address
+     *
+     * @param string $ip
+     * @return string
+     */
+    protected function maskIpAddress(string $ip): string
+    {
+
+		// Check if it's ipv4 or ipv6 with a '.' or a ':'
+		$ipCharacter = strpos($ip, '.') !== false ? '.' : ':';
+
+        $parts = explode($ipCharacter, $ip);
+        if (count($parts) === 4) {
+			// replace the last part of the IP address with 'x' for as many digits as there are
+            $parts[3] = str_repeat('x', strlen($parts[3]));
+        }
+
+		// account for ipv6 addresses
+		if (count($parts) > 4) {
+			// replace the last part of the IP address with 'x' for as many digits as there are
+			$parts[count($parts) - 1] = str_repeat('x', strlen($parts[count($parts) - 1]));
+		}
+
+		// Join the parts back together
+        return implode('.', $parts);
     }
 }
