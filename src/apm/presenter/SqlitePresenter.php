@@ -175,7 +175,7 @@ class SqlitePresenter implements PresenterInterface
         
         // Check if database supports JSON functions
         $hasJsonFunctions = $this->databaseSupportsJson();
-
+        
         // Extract filter parameters from the search string or use directly provided parameters
         $url = $_GET['url'] ?? '';
         $responseCode = $_GET['response_code'] ?? '';
@@ -190,6 +190,9 @@ class SqlitePresenter implements PresenterInterface
         $host = $_GET['host'] ?? '';
         $sessionId = $_GET['session_id'] ?? '';
         $userAgent = $_GET['user_agent'] ?? '';
+        
+        // Enhanced custom event data filters - multiple keys and values with operators
+        $eventKeys = isset($_GET['event_keys']) ? json_decode($_GET['event_keys'], true) : [];
         
         // Build main query with conditions for URL and response code
         $conditions = ['timestamp >= ?'];
@@ -280,8 +283,105 @@ class SqlitePresenter implements PresenterInterface
             $customEventRequestIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
         }
         
+        // Get request IDs from custom event data if key/value filters are set
+        $customEventDataRequestIds = [];
+        if (!empty($eventKeys)) {
+            // Build complex query for multiple key/value pairs
+            $keyValueConditions = [];
+            $keyValueParams = [];
+            $keyValueGroups = [];
+            
+            // Group number to match pairs of key/value conditions
+            $groupNum = 0;
+            
+            foreach ($eventKeys as $filter) {
+                $key = $filter['key'] ?? '';
+                $operator = $filter['operator'] ?? 'contains';
+                $value = $filter['value'] ?? '';
+                
+                if (empty($key) && empty($value)) {
+                    continue;
+                }
+                
+                $groupConditions = [];
+                
+                // Add key condition if provided
+                if (!empty($key)) {
+                    $groupConditions[] = "json_key = ?";
+                    $keyValueParams[] = $key;
+                }
+                
+                // Add value condition if provided
+                if (!empty($value)) {
+                    switch ($operator) {
+                        case 'exact':
+                            $groupConditions[] = "json_value = ?";
+                            $keyValueParams[] = $value;
+                            break;
+                        case 'contains':
+                            $groupConditions[] = "json_value LIKE ?";
+                            $keyValueParams[] = "%$value%";
+                            break;
+                        case 'starts_with':
+                            $groupConditions[] = "json_value LIKE ?";
+                            $keyValueParams[] = "$value%";
+                            break;
+                        case 'ends_with':
+                            $groupConditions[] = "json_value LIKE ?";
+                            $keyValueParams[] = "%$value";
+                            break;
+                        case 'greater_than':
+                            $groupConditions[] = "CAST(json_value AS NUMERIC) > ?";
+                            $keyValueParams[] = $value;
+                            break;
+                        case 'less_than':
+                            $groupConditions[] = "CAST(json_value AS NUMERIC) < ?";
+                            $keyValueParams[] = $value;
+                            break;
+                        case 'greater_than_equal':
+                            $groupConditions[] = "CAST(json_value AS NUMERIC) >= ?";
+                            $keyValueParams[] = $value;
+                            break;
+                        case 'less_than_equal':
+                            $groupConditions[] = "CAST(json_value AS NUMERIC) <= ?";
+                            $keyValueParams[] = $value;
+                            break;
+                    }
+                }
+                
+                if (!empty($groupConditions)) {
+                    $keyValueGroups[] = "(" . implode(" AND ", $groupConditions) . ")";
+                    $groupNum++;
+                }
+            }
+            
+            if (!empty($keyValueGroups)) {
+                // For "AND" logic between pairs (all conditions must match)
+                $keyValueQuery = "
+                    SELECT request_id 
+                    FROM apm_requests 
+                    WHERE request_id IN (
+                        SELECT request_id 
+                        FROM apm_custom_event_data 
+                        WHERE " . implode(" OR ", $keyValueGroups) . "
+                        GROUP BY request_id
+                        HAVING COUNT(DISTINCT json_key) >= ?
+                    )
+                    LIMIT ?
+                ";
+                
+                // Add the count of distinct conditions to ensure all match
+                $keyValueParams[] = count(array_filter($eventKeys, fn($f) => !empty($f['key']) || !empty($f['value'])));
+                $keyValueParams[] = $maxRequests;
+                
+                $stmt = $this->db->prepare($keyValueQuery);
+                $stmt->execute($keyValueParams);
+                $customEventDataRequestIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            }
+        }
+        
         // Merge request IDs from different sources
-        $allRequestIds = array_merge($mainRequestIds, $customEventRequestIds);
+        $allRequestIds = array_merge($mainRequestIds, $customEventRequestIds, $customEventDataRequestIds);
         $uniqueRequestIds = array_unique($allRequestIds);
         
         // If we have no matching requests, return empty result
@@ -442,18 +542,48 @@ class SqlitePresenter implements PresenterInterface
         $stmt->execute([$requestId]);
         $request['cache'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        // Custom Events
-        $stmt = $this->db->prepare('SELECT timestamp, event_type, event_data FROM apm_custom_events WHERE request_id = ?');
+        // Custom Events - Use both tables for comprehensive data
+        $stmt = $this->db->prepare('SELECT id, timestamp, event_type, event_data FROM apm_custom_events WHERE request_id = ?');
         $stmt->execute([$requestId]);
         $customEvents = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         // Process custom events data
         $events = [];
         foreach ($customEvents as $event) {
+            $eventData = json_decode($event['event_data'], true);
+            
+            // If the custom event data table exists, retrieve the key-value pairs
+			$dataStmt = $this->db->prepare('
+				SELECT json_key, json_value FROM apm_custom_event_data 
+				WHERE custom_event_id = ? AND request_id = ?
+			');
+			$dataStmt->execute([$event['id'], $requestId]);
+			$keyValuePairs = $dataStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+			
+			// For each key-value pair, try to decode JSON values
+			foreach ($keyValuePairs as $key => $value) {
+				// Try to decode the value if it looks like JSON
+				if (is_string($value) && 
+					((str_starts_with($value, '{') && str_ends_with($value, '}')) || 
+						(str_starts_with($value, '[') && str_ends_with($value, ']')))) {
+					try {
+						$decodedValue = json_decode($value, true);
+						if (json_last_error() === JSON_ERROR_NONE) {
+							$keyValuePairs[$key] = $decodedValue;
+						}
+					} catch (\Exception $e) {
+						// Keep the original value if decoding fails
+					}
+				}
+			}
+			
+			// Use key-value pairs if available, otherwise fall back to the JSON data
+			$eventData = !empty($keyValuePairs) ? $keyValuePairs : $eventData;
+            
             $events[] = [
                 'timestamp' => $event['timestamp'],
                 'type' => $event['event_type'],
-                'data' => json_decode($event['event_data'], true)
+                'data' => $eventData
             ];
         }
         
@@ -538,5 +668,46 @@ class SqlitePresenter implements PresenterInterface
 
 		// Join the parts back together
         return implode('.', $parts);
+    }
+
+    /**
+     * Get available event keys for search filters
+     * 
+     * @param string $threshold Timestamp threshold
+     * @return array List of unique event keys
+     */
+    public function getEventKeys(string $threshold): array
+    {
+        try {
+            $stmt = $this->db->prepare("
+                SELECT DISTINCT json_key 
+                FROM apm_custom_event_data 
+                WHERE request_id IN (SELECT request_id FROM apm_requests WHERE timestamp >= ?)
+                ORDER BY json_key
+            ");
+            $stmt->execute([$threshold]);
+            return $stmt->fetchAll(PDO::FETCH_COLUMN);
+        } catch (\Exception $e) {
+            return [];
+        }
+    }
+
+    /**
+     * Get operator options for event value filtering
+     * 
+     * @return array List of available operators
+     */
+    public function getEventValueOperators(): array
+    {
+        return [
+            ['id' => 'contains', 'name' => 'Contains', 'desc' => 'Value contains the text (case-insensitive)'],
+            ['id' => 'exact', 'name' => 'Equals', 'desc' => 'Value exactly matches the text'],
+            ['id' => 'starts_with', 'name' => 'Starts with', 'desc' => 'Value starts with the text'],
+            ['id' => 'ends_with', 'name' => 'Ends with', 'desc' => 'Value ends with the text'],
+            ['id' => 'greater_than', 'name' => '>', 'desc' => 'Value is greater than (numeric comparison)'],
+            ['id' => 'less_than', 'name' => '<', 'desc' => 'Value is less than (numeric comparison)'],
+            ['id' => 'greater_than_equal', 'name' => '>=', 'desc' => 'Value is greater than or equal to (numeric comparison)'],
+            ['id' => 'less_than_equal', 'name' => '<=', 'desc' => 'Value is less than or equal to (numeric comparison)'],
+        ];
     }
 }

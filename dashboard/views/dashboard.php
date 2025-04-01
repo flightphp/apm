@@ -183,10 +183,55 @@
 											<label for="filter-user-agent" class="form-label">User Agent</label>
 											<input type="text" class="form-control" id="filter-user-agent" placeholder="Contains...">
 										</div>
-										<div class="col-12 text-end">
-											<button type="button" class="btn btn-primary" id="apply-filters">Apply Filters</button>
-											<button type="button" class="btn btn-outline-secondary" id="clear-filters">Clear Filters</button>
-										</div>
+										
+
+                                        <!-- Replace existing Event Key/Value filters with this new section -->
+                                        <div class="col-12">
+                                            <div class="card border-light">
+                                                <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                                                    <span>Event Data Filters</span>
+                                                    <button type="button" class="btn btn-sm btn-outline-primary" id="add-event-filter">
+                                                        <i class="bi bi-plus-circle"></i> Add Filter
+                                                    </button>
+                                                </div>
+                                                <div class="card-body p-2" id="event-filters-container">
+                                                    <!-- Filter rows will be added here dynamically -->
+                                                    <div class="text-muted small text-center py-2" id="no-event-filters-msg">
+                                                        No event data filters. Click "Add Filter" to add one.
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Event filter template (hidden) -->
+                                        <template id="event-filter-template">
+                                            <div class="row g-2 mb-2 event-filter-row">
+                                                <div class="col-4">
+                                                    <select class="form-select form-select-sm event-key-select">
+                                                        <option value="">Any Key</option>
+                                                        <!-- Will be populated by JavaScript -->
+                                                    </select>
+                                                </div>
+                                                <div class="col-3">
+                                                    <select class="form-select form-select-sm event-operator-select">
+                                                        <!-- Will be populated by JavaScript -->
+                                                    </select>
+                                                </div>
+                                                <div class="col-4">
+                                                    <input type="text" class="form-control form-control-sm event-value-input" placeholder="Value...">
+                                                </div>
+                                                <div class="col-1">
+                                                    <button type="button" class="btn btn-sm btn-outline-danger remove-event-filter">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </template>
+
+                                        <div class="col-12 text-end">
+                                            <button type="button" class="btn btn-primary" id="apply-filters">Apply Filters</button>
+                                            <button type="button" class="btn btn-outline-secondary" id="clear-filters">Clear Filters</button>
+                                        </div>
 									</div>
 								</div>
 							</div>

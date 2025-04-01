@@ -119,7 +119,12 @@ function loadRequestLogData() {
     // Add each active filter to the query params
     Object.entries(activeFilters).forEach(([key, value]) => {
         if (value !== null && value !== '') {
-            queryParams.append(key, value);
+            // Special handling for event_keys which needs to be JSON
+            if (key === 'event_keys') {
+                queryParams.append(key, JSON.stringify(value));
+            } else {
+                queryParams.append(key, value);
+            }
         }
     });
     
@@ -684,6 +689,140 @@ function setupFilterHandlers() {
     const clearFiltersBtn = document.getElementById('clear-filters');
     const activeFiltersContainer = document.getElementById('active-filters');
     const activeFiltersList = document.getElementById('active-filters-list');
+    const addEventFilterBtn = document.getElementById('add-event-filter');
+    const eventFiltersContainer = document.getElementById('event-filters-container');
+    const noEventFiltersMsg = document.getElementById('no-event-filters-msg');
+    const eventFilterTemplate = document.getElementById('event-filter-template');
+    
+    // Store available keys for reuse
+    let availableEventKeys = [];
+    
+    // Define operators directly instead of loading them
+    const availableOperators = [
+        { id: 'contains', name: 'Contains', desc: 'Value contains the text (case-insensitive)' },
+        { id: 'exact', name: 'Equals', desc: 'Value exactly matches the text' },
+        { id: 'starts_with', name: 'Starts with', desc: 'Value starts with the text' },
+        { id: 'ends_with', name: 'Ends with', desc: 'Value ends with the text' },
+        { id: 'greater_than', name: '>', desc: 'Value is greater than (numeric comparison)' },
+        { id: 'less_than', name: '<', desc: 'Value is less than (numeric comparison)' },
+        { id: 'greater_than_equal', name: '>=', desc: 'Value is greater than or equal to (numeric comparison)' },
+        { id: 'less_than_equal', name: '<=', desc: 'Value is less than or equal to (numeric comparison)' }
+    ];
+    
+    // Load event keys for dropdowns
+    function loadEventKeys() {
+        const range = rangeSelector.value;
+        fetch(`/apm/data/event-keys?range=${range}`)
+            .then(response => {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.json();
+            })
+            .then(data => {
+                availableEventKeys = data.event_keys || [];
+                updateEventKeyDropdowns();
+            })
+            .catch(error => console.error('Error loading event keys:', error));
+    }
+    
+    // Update all event key dropdowns with available options
+    function updateEventKeyDropdowns() {
+        document.querySelectorAll('.event-key-select').forEach(select => {
+            const currentValue = select.value;
+            
+            // Clear existing options except the first one
+            while (select.options.length > 1) {
+                select.remove(1);
+            }
+            
+            // Add options for each key
+            if (availableEventKeys.length) {
+                availableEventKeys.forEach(key => {
+                    const option = document.createElement('option');
+                    option.value = key;
+                    option.textContent = key;
+                    select.appendChild(option);
+                });
+            }
+            
+            // Restore previous value if it exists
+            if (currentValue && availableEventKeys.includes(currentValue)) {
+                select.value = currentValue;
+            }
+        });
+    }
+    
+    // Update all operator dropdowns (now uses hardcoded values)
+    function updateOperatorDropdowns() {
+        document.querySelectorAll('.event-operator-select').forEach(select => {
+            const currentValue = select.value || 'contains';
+            
+            // Clear existing options
+            select.innerHTML = '';
+            
+            // Add options for each operator
+            availableOperators.forEach(op => {
+                const option = document.createElement('option');
+                option.value = op.id;
+                option.textContent = op.name;
+                option.title = op.desc;
+                select.appendChild(option);
+            });
+            
+            // Restore previous value
+            select.value = currentValue;
+        });
+    }
+    
+    // Create a new event filter row
+    function addEventFilterRow(keyValue = '', operator = 'contains', valueValue = '') {
+        // Hide the "no filters" message
+        noEventFiltersMsg.style.display = 'none';
+        
+        // Clone the template
+        const clone = document.importNode(eventFilterTemplate.content, true);
+        const row = clone.querySelector('.event-filter-row');
+        
+        // Set initial values if provided
+        const keySelect = row.querySelector('.event-key-select');
+        const operatorSelect = row.querySelector('.event-operator-select');
+        const valueInput = row.querySelector('.event-value-input');
+        
+        // Populate dropdowns
+        updateEventKeyDropdowns();
+        updateOperatorDropdowns();
+        
+        // Set values
+        if (keyValue) keySelect.value = keyValue;
+        if (operator) operatorSelect.value = operator;
+        if (valueValue) valueInput.value = valueValue;
+        
+        // Add remove handler
+        row.querySelector('.remove-event-filter').addEventListener('click', function() {
+            row.remove();
+            
+            // Show message if no filters remain
+            if (eventFiltersContainer.querySelectorAll('.event-filter-row').length === 0) {
+                noEventFiltersMsg.style.display = 'block';
+            }
+        });
+        
+        // Append to container
+        eventFiltersContainer.appendChild(row);
+        
+        return row;
+    }
+    
+    // Add event filter button click
+    addEventFilterBtn.addEventListener('click', () => {
+        addEventFilterRow();
+    });
+    
+    // Initial load of event keys and populate operator dropdowns
+    loadEventKeys();
+    updateOperatorDropdowns();
+    
+    // Reload event keys when range changes
+    rangeSelector.addEventListener('change', loadEventKeys);
     
     // Show/hide exact code input based on selection
     filterResponseCode.addEventListener('change', () => {
@@ -708,6 +847,18 @@ function setupFilterHandlers() {
         const sessionId = document.getElementById('filter-session-id').value.trim();
         const userAgent = document.getElementById('filter-user-agent').value.trim();
         
+        // Collect event filter data
+        const eventFilters = [];
+        document.querySelectorAll('.event-filter-row').forEach(row => {
+            const key = row.querySelector('.event-key-select').value;
+            const operator = row.querySelector('.event-operator-select').value;
+            const value = row.querySelector('.event-value-input').value.trim();
+            
+            if (key || value) {
+                eventFilters.push({ key, operator, value });
+            }
+        });
+        
         // Clear previous filters
         activeFilters = {};
         
@@ -730,6 +881,11 @@ function setupFilterHandlers() {
         if (host) activeFilters.host = host;
         if (sessionId) activeFilters.session_id = sessionId;
         if (userAgent) activeFilters.user_agent = userAgent;
+        
+        // Add event filters if any exist
+        if (eventFilters.length > 0) {
+            activeFilters.event_keys = eventFilters;
+        }
         
         // Update UI to show active filters
         updateActiveFiltersDisplay();
@@ -757,6 +913,10 @@ function setupFilterHandlers() {
         document.getElementById('filter-host').value = '';
         document.getElementById('filter-session-id').value = '';
         document.getElementById('filter-user-agent').value = '';
+        
+        // Clear event filters
+        eventFiltersContainer.innerHTML = '';
+        noEventFiltersMsg.style.display = 'block';
         
         // Hide the exact code input
         exactCodeContainer.style.display = 'none';
@@ -790,56 +950,77 @@ function setupFilterHandlers() {
             
             switch (key) {
                 case 'url':
-                    filterLabel = `URL: ${value}`;
-                    break;
                 case 'request_id':
-                    filterLabel = `Request ID: ${value}`;
-                    break;
                 case 'response_code':
-                    filterLabel = `Code: ${value}`;
-                    break;
-                case 'response_code_prefix':
-                    filterLabel = `Code: ${value}xx`;
-                    break;
-                case 'is_bot':
-                    filterLabel = `Bot: ${value === '1' ? 'Yes' : 'No'}`;
-                    break;
                 case 'custom_event_type':
-                    filterLabel = `Event: ${value}`;
-                    break;
                 case 'min_time':
-                    filterLabel = `Min Time: ${value}ms`;
-                    break;
-                // Add new metadata filter labels
                 case 'ip':
-                    filterLabel = `IP: ${value}`;
-                    break;
                 case 'host':
-                    filterLabel = `Host: ${value}`;
-                    break;
                 case 'session_id':
-                    filterLabel = `Session: ${value}`;
-                    break;
                 case 'user_agent':
-                    filterLabel = `User Agent: ${value}`;
+                    // ...existing code for these cases...
                     break;
+                    
+                case 'event_keys':
+                    // For each event key filter, create a separate badge
+                    value.forEach((filter, index) => {
+                        const opDisplay = availableOperators.find(op => op.id === filter.operator)?.name || filter.operator;
+                        const filterKey = `event_keys_${index}`;
+                        const display = filter.key ? 
+                            `${filter.key} ${opDisplay} ${filter.value}` : 
+                            `Any Key ${opDisplay} ${filter.value}`;
+                            
+                        const badge = document.createElement('span');
+                        badge.className = 'badge bg-info me-2 mb-1';
+                        badge.innerHTML = `Event: ${display} <i class="bi bi-x-circle" data-filter-type="event_key" data-filter-index="${index}"></i>`;
+                        
+                        // Add click event to remove this specific event filter
+                        badge.querySelector('i').addEventListener('click', function() {
+                            const index = parseInt(this.dataset.filterIndex);
+                            activeFilters.event_keys.splice(index, 1);
+                            
+                            if (activeFilters.event_keys.length === 0) {
+                                delete activeFilters.event_keys;
+                            }
+                            
+                            updateActiveFiltersDisplay();
+                            currentPage = 1;
+                            loadRequestLogData();
+                        });
+                        
+                        activeFiltersList.appendChild(badge);
+                    });
+                    return; // Skip the default badge creation for this key
+                    
                 default:
                     filterLabel = `${key}: ${value}`;
             }
             
-            const badge = document.createElement('span');
-            badge.className = 'badge bg-info me-2 mb-1';
-            badge.innerHTML = `${filterLabel} <i class="bi bi-x-circle" data-filter="${key}"></i>`;
-            
-            // Add click event to remove individual filter
-            badge.querySelector('i').addEventListener('click', function() {
-                delete activeFilters[this.dataset.filter];
-                updateActiveFiltersDisplay();
-                currentPage = 1;
-                loadRequestLogData();
-            });
-            
-            activeFiltersList.appendChild(badge);
+            if (filterLabel) { // Only create badge if we have a label
+                const badge = document.createElement('span');
+                badge.className = 'badge bg-info me-2 mb-1';
+                badge.innerHTML = `${filterLabel} <i class="bi bi-x-circle" data-filter="${key}"></i>`;
+                
+                // Add click event to remove individual filter
+                badge.querySelector('i').addEventListener('click', function() {
+                    delete activeFilters[this.dataset.filter];
+                    updateActiveFiltersDisplay();
+                    currentPage = 1;
+                    loadRequestLogData();
+                });
+                
+                activeFiltersList.appendChild(badge);
+            }
+        });
+    }
+    
+    // If we have event filters in active filters, recreate the UI for them
+    if (activeFilters.event_keys && Array.isArray(activeFilters.event_keys) && activeFilters.event_keys.length > 0) {
+        noEventFiltersMsg.style.display = 'none';
+        eventFiltersContainer.innerHTML = '';
+        
+        activeFilters.event_keys.forEach(filter => {
+            addEventFilterRow(filter.key, filter.operator, filter.value);
         });
     }
 }

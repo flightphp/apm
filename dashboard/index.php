@@ -62,4 +62,12 @@ $app->route('GET /apm/data/requests', function() use ($app, $presenter) {
 	$app->json($data);
 });
 
+// New endpoint to retrieve available event keys for filtering
+$app->route('GET /apm/data/event-keys', function() use ($app, $presenter) {
+    $range = Flight::request()->query['range'] ?? 'last_hour';
+    $threshold = calculateThreshold($range);
+    $eventKeys = $presenter->getEventKeys($threshold);
+    $app->json(['event_keys' => $eventKeys]);
+});
+
 $app->start();

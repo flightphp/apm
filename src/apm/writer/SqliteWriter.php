@@ -362,19 +362,46 @@ class SqliteWriter implements WriterInterface
             return;
         }
         
-        $stmt = $this->getStatement('
+        // First statement for original table
+        $eventStmt = $this->getStatement('
             INSERT INTO apm_custom_events (
                 request_id, event_type, event_data, timestamp
             ) VALUES (?, ?, ?, datetime(?, \'unixepoch\'))
         ');
         
+        // Second statement for new key-value table
+        $dataStmt = $this->getStatement('
+            INSERT INTO apm_custom_event_data (
+                custom_event_id, request_id, json_key, json_value
+            ) VALUES (?, ?, ?, ?)
+        ');
+        
         foreach ($customEvents as $event) {
-            $stmt->execute([
+            // Insert into main events table first
+            $eventStmt->execute([
                 $requestId,
                 $event['type'],
                 json_encode($event['data'], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
                 $event['timestamp']
             ]);
+            
+            // Get the last inserted ID for the foreign key relationship
+            $eventId = $this->pdo->lastInsertId();
+            
+            // Now insert each key-value pair into the event_data table
+            foreach ($event['data'] as $key => $value) {
+                // If value is an array, convert it to JSON string
+                if (is_array($value)) {
+                    $value = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+                }
+                
+                $dataStmt->execute([
+                    $eventId,
+                    $requestId,
+                    $key,
+                    $value
+                ]);
+            }
         }
     }
     

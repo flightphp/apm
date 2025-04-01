@@ -30,4 +30,12 @@ interface PresenterInterface
      * @return array Request details including middleware, queries, errors, cache operations, and custom events
      */
     public function getRequestDetails(string $requestId): array;
+
+	/**
+     * Get available event keys for search filters
+     * 
+     * @param string $threshold Timestamp threshold
+     * @return array List of unique event keys
+     */
+    public function getEventKeys(string $threshold): array;
 }
