@@ -1,8 +1,5 @@
-
--- Add a deprecated comment to the apm_custom_events.event_data column
-ALTER TABLE apm_custom_events
-CHANGE COLUMN event_data event_data TEXT COMMENT 'Deprecated: Use apm_custom_event_data instead.';
-
+-- Note: SQLite doesn't support column comments or CHANGE COLUMN syntax
+-- Keeping event_data column as is, but it will be considered deprecated
 
 -- Create a new table for custom event key-value data
 CREATE TABLE IF NOT EXISTS apm_custom_event_data (
@@ -22,10 +19,10 @@ CREATE INDEX IF NOT EXISTS idx_apm_custom_event_data_key ON apm_custom_event_dat
 -- Migrate existing event_data JSON into the new apm_custom_event_data table
 INSERT INTO apm_custom_event_data (custom_event_id, request_id, json_key, json_value)
 SELECT 
-    id AS custom_event_id,
-    request_id,
-    json_each.json_key AS json_key,
-    json_each.json_value AS json_value
+    apm_custom_events.id AS custom_event_id,
+    apm_custom_events.request_id,
+    json_each.key AS json_key,
+    json_each.value AS json_value
 FROM 
     apm_custom_events,
     json_each(apm_custom_events.event_data);

@@ -3,6 +3,7 @@
 namespace flight\apm\presenter;
 
 use PDO;
+use Throwable;
 
 class SqlitePresenter implements PresenterInterface
 {
@@ -266,123 +267,180 @@ class SqlitePresenter implements PresenterInterface
         // Get request IDs from custom events if custom event type filter is set
         $customEventRequestIds = [];
         if (!empty($customEventType)) {
-            // Try to use JSON functions if available
-            if ($hasJsonFunctions) {
-                // SQLite JSON functions
-                $customEventsQuery = "SELECT request_id FROM apm_custom_events 
-                    WHERE event_type LIKE ? 
-                    LIMIT ?";
-                $stmt = $this->db->prepare($customEventsQuery);
-                $stmt->execute(["%$customEventType%", $maxRequests]);
-            } else {
-                // Fallback: Search only in event_type
-                $customEventsQuery = "SELECT request_id FROM apm_custom_events WHERE event_type LIKE ? LIMIT ?";
-                $stmt = $this->db->prepare($customEventsQuery);
-                $stmt->execute(["%$customEventType%", $maxRequests]);
-            }
+            // Search only in event_type
+            $customEventsQuery = "SELECT request_id FROM apm_custom_events WHERE event_type LIKE ? LIMIT ?";
+            $stmt = $this->db->prepare($customEventsQuery);
+            $stmt->execute(["%$customEventType%", $maxRequests]);
             $customEventRequestIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            
+            // If no matching custom events, we should return empty results
+            // This ensures that when a custom event type filter is specified but no matches are found,
+            // the final result set will be empty
+            if (empty($customEventRequestIds) && !empty($customEventType)) {
+                return [
+                    'requests' => [],
+                    'pagination' => [
+                        'currentPage' => $page,
+                        'totalPages' => 0,
+                        'perPage' => $perPage,
+                        'totalRequests' => 0,
+                    ],
+                    'responseCodeDistribution' => []
+                ];
+            }
         }
         
         // Get request IDs from custom event data if key/value filters are set
         $customEventDataRequestIds = [];
         if (!empty($eventKeys)) {
-            // Build complex query for multiple key/value pairs
-            $keyValueConditions = [];
-            $keyValueParams = [];
-            $keyValueGroups = [];
+            // Use a simpler approach that's more compatible with SQLite
+            $validFilters = array_filter($eventKeys, fn($f) => !empty($f['key']) || !empty($f['value']));
             
-            // Group number to match pairs of key/value conditions
-            $groupNum = 0;
-            
-            foreach ($eventKeys as $filter) {
-                $key = $filter['key'] ?? '';
-                $operator = $filter['operator'] ?? 'contains';
-                $value = $filter['value'] ?? '';
+            if (!empty($validFilters)) {
+                // Process each filter separately to build individual queries
+                $matchingRequestIdSets = [];
                 
-                if (empty($key) && empty($value)) {
-                    continue;
-                }
-                
-                $groupConditions = [];
-                
-                // Add key condition if provided
-                if (!empty($key)) {
-                    $groupConditions[] = "json_key = ?";
-                    $keyValueParams[] = $key;
-                }
-                
-                // Add value condition if provided
-                if (!empty($value)) {
-                    switch ($operator) {
-                        case 'exact':
-                            $groupConditions[] = "json_value = ?";
-                            $keyValueParams[] = $value;
-                            break;
-                        case 'contains':
-                            $groupConditions[] = "json_value LIKE ?";
-                            $keyValueParams[] = "%$value%";
-                            break;
-                        case 'starts_with':
-                            $groupConditions[] = "json_value LIKE ?";
-                            $keyValueParams[] = "$value%";
-                            break;
-                        case 'ends_with':
-                            $groupConditions[] = "json_value LIKE ?";
-                            $keyValueParams[] = "%$value";
-                            break;
-                        case 'greater_than':
-                            $groupConditions[] = "CAST(json_value AS NUMERIC) > ?";
-                            $keyValueParams[] = $value;
-                            break;
-                        case 'less_than':
-                            $groupConditions[] = "CAST(json_value AS NUMERIC) < ?";
-                            $keyValueParams[] = $value;
-                            break;
-                        case 'greater_than_equal':
-                            $groupConditions[] = "CAST(json_value AS NUMERIC) >= ?";
-                            $keyValueParams[] = $value;
-                            break;
-                        case 'less_than_equal':
-                            $groupConditions[] = "CAST(json_value AS NUMERIC) <= ?";
-                            $keyValueParams[] = $value;
-                            break;
+                foreach ($validFilters as $filter) {
+                    $key = $filter['key'] ?? '';
+                    $operator = $filter['operator'] ?? 'exact';
+                    $value = $filter['value'] ?? '';
+                    
+                    if (empty($key) && empty($value)) {
+                        continue;
+                    }
+                    
+                    // Build a simpler query for this specific filter
+                    $filterParams = [];
+                    $filterConditions = [];
+                    
+                    if (!empty($key)) {
+                        $filterConditions[] = "json_key = ?";
+                        $filterParams[] = $key;
+                    }
+                    
+                    if (!empty($value)) {
+                        switch ($operator) {
+                            case 'exact':
+                                $filterConditions[] = "json_value = ?";
+                                $filterParams[] = $value;
+                                break;
+                            case 'contains':
+                                $filterConditions[] = "json_value LIKE ?";
+                                $filterParams[] = "%$value%";
+                                break;
+                            case 'starts_with':
+                                $filterConditions[] = "json_value LIKE ?";
+                                $filterParams[] = "$value%";
+                                break;
+                            case 'ends_with':
+                                $filterConditions[] = "json_value LIKE ?";
+                                $filterParams[] = "%$value";
+                                break;
+                            // For numeric comparisons, use simple string comparison
+                            // This is more reliable in SQLite without CAST
+                            case 'greater_than':
+                                $filterConditions[] = "json_value > ?";
+                                $filterParams[] = (string)$value;
+                                break;
+                            case 'less_than':
+                                $filterConditions[] = "json_value < ?";
+                                $filterParams[] = (string)$value;
+                                break;
+                            case 'greater_than_equal':
+                                $filterConditions[] = "json_value >= ?";
+                                $filterParams[] = (string)$value;
+                                break;
+                            case 'less_than_equal':
+                                $filterConditions[] = "json_value <= ?";
+                                $filterParams[] = (string)$value;
+                                break;
+                        }
+                    }
+                    
+                    // If we have conditions for this filter
+                    if (!empty($filterConditions)) {
+                        $filterQuery = "SELECT DISTINCT request_id FROM apm_custom_event_data WHERE " . 
+                            implode(" AND ", $filterConditions);
+                            
+                        try {
+                                
+                            $stmt = $this->db->prepare($filterQuery);
+                            $stmt->execute($filterParams);
+                            $matchingIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                            
+                            if (!empty($matchingIds)) {
+                                $matchingRequestIdSets[] = $matchingIds;
+                            }
+                        } catch (Throwable $e) {
+                            error_log("Error in filter query: " . $e->getMessage());
+                        }
                     }
                 }
                 
-                if (!empty($groupConditions)) {
-                    $keyValueGroups[] = "(" . implode(" AND ", $groupConditions) . ")";
-                    $groupNum++;
+                // If we have multiple filters, find intersections
+                if (count($matchingRequestIdSets) > 0) {
+                    // Start with the first set
+                    $customEventDataRequestIds = array_shift($matchingRequestIdSets);
+                    
+                    // Intersect with each additional set
+                    foreach ($matchingRequestIdSets as $idSet) {
+                        $customEventDataRequestIds = array_intersect($customEventDataRequestIds, $idSet);
+                    }
                 }
-            }
-            
-            if (!empty($keyValueGroups)) {
-                // For "AND" logic between pairs (all conditions must match)
-                $keyValueQuery = "
-                    SELECT request_id 
-                    FROM apm_requests 
-                    WHERE request_id IN (
-                        SELECT request_id 
-                        FROM apm_custom_event_data 
-                        WHERE " . implode(" OR ", $keyValueGroups) . "
-                        GROUP BY request_id
-                        HAVING COUNT(DISTINCT json_key) >= ?
-                    )
-                    LIMIT ?
-                ";
-                
-                // Add the count of distinct conditions to ensure all match
-                $keyValueParams[] = count(array_filter($eventKeys, fn($f) => !empty($f['key']) || !empty($f['value'])));
-                $keyValueParams[] = $maxRequests;
-                
-                $stmt = $this->db->prepare($keyValueQuery);
-                $stmt->execute($keyValueParams);
-                $customEventDataRequestIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
             }
         }
         
         // Merge request IDs from different sources
-        $allRequestIds = array_merge($mainRequestIds, $customEventRequestIds, $customEventDataRequestIds);
-        $uniqueRequestIds = array_unique($allRequestIds);
+        // This logic needs to be updated to use intersections when appropriate
+        $uniqueRequestIds = [];
+        
+        // Determine which filters are active
+        $hasCustomEventFilters = !empty($customEventType) || !empty($eventKeys);
+        $hasMainFilters = !empty($url) || !empty($responseCode) || !empty($responseCodePrefix) || 
+                          $isBot !== '' || !empty($minTime) || !empty($ip) || !empty($host) || 
+                          !empty($sessionId) || !empty($userAgent) || !empty($requestId);
+
+        // Logic for applying filters
+        if ($hasCustomEventFilters) {
+            // Start with empty set if we're filtering by custom events
+            $matchingIds = [];
+            
+            // Apply custom event type filter if present
+            if (!empty($customEventType) && !empty($customEventRequestIds)) {
+                $matchingIds = $customEventRequestIds;
+            }
+            // Apply custom event data filter if present
+            if (!empty($eventKeys) && !empty($customEventDataRequestIds)) {
+                if (!empty($matchingIds)) {
+                    // Intersect with existing matches
+                    $matchingIds = array_intersect($matchingIds, $customEventDataRequestIds);
+                } else {
+                    // Use these as the starting set
+                    $matchingIds = $customEventDataRequestIds;
+                }
+            }
+            
+            // Apply main filters if present
+            if ($hasMainFilters) {
+                if (!empty($matchingIds)) {
+                    // Intersect with main request IDs
+                    $uniqueRequestIds = array_intersect($matchingIds, $mainRequestIds);
+                } else {
+                    // This case shouldn't happen in practice
+                    $uniqueRequestIds = [];
+                }
+            } else {
+                // No main filters, use custom event matches directly
+                $uniqueRequestIds = $matchingIds;
+            }
+        } else {
+            // No custom event filters, use main request IDs directly
+            $uniqueRequestIds = $mainRequestIds;
+        }
+        
+        // Make sure we have unique IDs
+        $uniqueRequestIds = array_unique($uniqueRequestIds);
+		// var_dump($uniqueRequestIds);
         
         // If we have no matching requests, return empty result
         if (empty($uniqueRequestIds)) {
@@ -421,7 +479,7 @@ class SqlitePresenter implements PresenterInterface
         
         // Get the actual request data
         $requestQuery = "SELECT request_id, timestamp, request_url, total_time, response_code, is_bot, ip, user_agent, host, session_id FROM apm_requests 
-            WHERE request_id IN ($placeholders) ORDER BY id DESC";
+            WHERE request_id IN ($placeholders) ORDER BY timestamp DESC";
         $stmt = $this->db->prepare($requestQuery);
         $stmt->execute($paginatedRequestIds);
         $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);

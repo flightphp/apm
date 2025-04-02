@@ -699,8 +699,8 @@ function setupFilterHandlers() {
     
     // Define operators directly instead of loading them
     const availableOperators = [
-        { id: 'contains', name: 'Contains', desc: 'Value contains the text (case-insensitive)' },
         { id: 'exact', name: 'Equals', desc: 'Value exactly matches the text' },
+        { id: 'contains', name: 'Contains', desc: 'Value contains the text (case-insensitive)' },
         { id: 'starts_with', name: 'Starts with', desc: 'Value starts with the text' },
         { id: 'ends_with', name: 'Ends with', desc: 'Value ends with the text' },
         { id: 'greater_than', name: '>', desc: 'Value is greater than (numeric comparison)' },
@@ -754,7 +754,7 @@ function setupFilterHandlers() {
     // Update all operator dropdowns (now uses hardcoded values)
     function updateOperatorDropdowns() {
         document.querySelectorAll('.event-operator-select').forEach(select => {
-            const currentValue = select.value || 'contains';
+            const currentValue = select.value || 'exact';
             
             // Clear existing options
             select.innerHTML = '';
@@ -774,41 +774,40 @@ function setupFilterHandlers() {
     }
     
     // Create a new event filter row
-    function addEventFilterRow(keyValue = '', operator = 'contains', valueValue = '') {
+    function addEventFilterRow(keyValue = '', operator = 'exact', valueValue = '') {
         // Hide the "no filters" message
         noEventFiltersMsg.style.display = 'none';
-        
+
         // Clone the template
         const clone = document.importNode(eventFilterTemplate.content, true);
         const row = clone.querySelector('.event-filter-row');
-        
+
+        // Append to container first to ensure DOM is updated
+        eventFiltersContainer.appendChild(row);
+
+        // Populate dropdowns after appending to the DOM
+        updateEventKeyDropdowns();
+        updateOperatorDropdowns();
+
         // Set initial values if provided
         const keySelect = row.querySelector('.event-key-select');
         const operatorSelect = row.querySelector('.event-operator-select');
         const valueInput = row.querySelector('.event-value-input');
-        
-        // Populate dropdowns
-        updateEventKeyDropdowns();
-        updateOperatorDropdowns();
-        
-        // Set values
+
         if (keyValue) keySelect.value = keyValue;
         if (operator) operatorSelect.value = operator;
         if (valueValue) valueInput.value = valueValue;
-        
+
         // Add remove handler
         row.querySelector('.remove-event-filter').addEventListener('click', function() {
             row.remove();
-            
+
             // Show message if no filters remain
             if (eventFiltersContainer.querySelectorAll('.event-filter-row').length === 0) {
                 noEventFiltersMsg.style.display = 'block';
             }
         });
-        
-        // Append to container
-        eventFiltersContainer.appendChild(row);
-        
+
         return row;
     }
     

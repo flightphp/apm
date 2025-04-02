@@ -14,64 +14,125 @@
 }
 
 [data-theme="dark"] {
-    --bg-color: #212529;
-    --text-color: #f8f9fa;
-    --card-bg: #343a40;
-    --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    --header-bg: #2c3034;
-    --badge-primary: #6ea8fe;
-    --badge-success: #20c997;
-    --badge-danger: #f27474;
-    --badge-info: #6edff6;
-    --badge-warning: #ffca2c;
-    --border-color: #495057;
+    --bg-color: #121212; /* Darker background for better contrast */
+    --text-color: #e0e0e0; /* Lighter text for readability */
+    --card-bg: #1e1e1e; /* Slightly lighter card background */
+    --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.5); /* Stronger shadow for depth */
+    --header-bg: #1a1a1a; /* Consistent header background */
+    --badge-primary: #4a90e2; /* Softer blue for badges */
+    --badge-success: #28a745; /* Standard green for success */
+    --badge-danger: #dc3545; /* Standard red for danger */
+    --badge-info: #17a2b8; /* Standard cyan for info */
+    --badge-warning: #ffc107; /* Standard yellow for warning */
+    --border-color: #333333; /* Subtle border color */
 }
 
 [data-theme="dark"] .card-header {
-    color: var(--text-color);
+    background-color: #2a2a2a; /* Slightly darker background for contrast */
+    color: var(--text-color); /* Ensure text is readable */
+    border-bottom: 1px solid var(--border-color); /* Add subtle border */
+    font-weight: 600; /* Keep font weight consistent */
 }
 
 [data-theme="dark"] .list-group-item {
     color: var(--text-color);
+    background-color: var(--card-bg); /* Match card background */
 }
 
 [data-theme="dark"] .card-body {
     color: var(--text-color);
+    background-color: var(--card-bg); /* Match card background */
 }
 
 [data-theme="dark"] .badge {
-    color: #fff; /* Ensure badge text is always white for readability */
+    color: #ffffff; /* Ensure badge text is always white */
+    background-color: var(--badge-primary); /* Use primary badge color */
 }
 
 [data-theme="dark"] .table {
-    background-color: var(--card-bg); /* Match the card background */
+    background-color: var(--card-bg); /* Match card background */
     color: var(--text-color);
 }
 
 [data-theme="dark"] .table thead th, .table>:not(caption)>*>* {
-    background-color: var(--header-bg); /* Match the header background */
+    background-color: var(--header-bg); /* Match header background */
     color: var(--text-color);
-    border-bottom: 2px solid #495057; /* Slightly lighter border for contrast */
+    border-bottom: 2px solid var(--border-color); /* Subtle border for contrast */
 }
 
-[data-theme="dark"] .table tbody tr, .table>:not(caption)>*>* {
-    background-color: var(--card-bg);
-    border-bottom: 1px solid #495057; /* Subtle border between rows */
+[data-theme="dark"] .table tbody tr {
+    background-color: var(--card-bg); /* Match card background */
+    border-bottom: 1px solid var(--border-color); /* Subtle border between rows */
 }
 
 [data-theme="dark"] .table-hover tbody tr:hover {
-    background-color: rgba(255, 255, 255, 0.1); /* Keep the hover effect */
+    background-color: rgba(255, 255, 255, 0.1); /* Slight hover effect */
 }
 
 [data-theme="dark"] .form-control {
-    background-color: #495057;
+    background-color: #2a2a2a; /* Slightly lighter input background */
     color: var(--text-color);
-    border-color: #6c757d;
+    border-color: var(--border-color);
 }
 
 [data-theme="dark"] .form-control::placeholder {
-    color: #ced4da; /* Lighter gray for better visibility */
+    color: #b0b0b0; /* Lighter gray for better visibility */
     opacity: 1; /* Ensure full opacity for readability */
+}
+
+[data-theme="dark"] .json-container {
+    background-color: #1e1e1e; /* Match card background */
+    color: var(--text-color);
+    border: 1px solid var(--border-color); /* Add subtle border */
+}
+
+[data-theme="dark"] .json-key {
+    color: #82aaff; /* Brighter blue for keys */
+}
+
+[data-theme="dark"] .json-string {
+    color: #c3e88d; /* Brighter green for strings */
+}
+
+[data-theme="dark"] .json-number {
+    color: #f78c6c; /* Brighter orange for numbers */
+}
+
+[data-theme="dark"] .json-boolean {
+    color: #ffcb6b; /* Brighter yellow for booleans */
+}
+
+[data-theme="dark"] .json-null {
+    color: #d4d4d4; /* Neutral gray for null */
+}
+
+[data-theme="dark"] .form-select {
+    background-color: #2a2a2a; /* Match input background */
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .form-select:focus {
+    background-color: #2a2a2a; /* Keep consistent on focus */
+    color: var(--text-color);
+    border-color: var(--badge-primary); /* Highlight border on focus */
+    box-shadow: 0 0 0 0.2rem rgba(74, 144, 226, 0.25); /* Subtle focus shadow */
+}
+
+[data-theme="dark"] .card-header.bg-light {
+    background-color: var(--header-bg); /* Match header background */
+    color: var(--text-color); /* Ensure text is readable */
+    border-bottom: 1px solid var(--border-color); /* Add subtle border */
+}
+
+[data-theme="dark"] .btn-outline-primary {
+    color: var(--badge-primary); /* Match primary badge color */
+    border-color: var(--badge-primary);
+}
+
+[data-theme="dark"] .btn-outline-primary:hover {
+    background-color: var(--badge-primary);
+    color: #ffffff; /* Ensure text is readable */
 }
 
 body {
@@ -283,23 +344,23 @@ body {
 }
 
 [data-theme="dark"] .json-key {
-    color: #bb86fc;
+    color: #82aaff; /* Brighter blue for keys */
 }
 
 [data-theme="dark"] .json-string {
-    color: #81c784;
+    color: #c3e88d; /* Brighter green for strings */
 }
 
 [data-theme="dark"] .json-number {
-    color: #64b5f6;
+    color: #f78c6c; /* Brighter orange for numbers */
 }
 
 [data-theme="dark"] .json-boolean {
-    color: #ffb74d;
+    color: #ffcb6b; /* Brighter yellow for booleans */
 }
 
 [data-theme="dark"] .json-null {
-    color: #bdbdbd;
+    color: #d4d4d4; /* Neutral gray for null */
 }
 
 /* Adjust table styles */

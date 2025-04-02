@@ -188,8 +188,8 @@
                                         <!-- Replace existing Event Key/Value filters with this new section -->
                                         <div class="col-12">
                                             <div class="card border-light">
-                                                <div class="card-header d-flex justify-content-between align-items-center bg-light">
-                                                    <span>Event Data Filters</span>
+                                                <div class="card-header d-flex justify-content-between align-items-center">
+                                                    <span>Custom Event Filters</span>
                                                     <button type="button" class="btn btn-sm btn-outline-primary" id="add-event-filter">
                                                         <i class="bi bi-plus-circle"></i> Add Filter
                                                     </button>
@@ -364,6 +364,6 @@
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Dashboard Logic -->
-    <script src="/js/script.js?ver=2"></script>
+    <script src="/js/script.js?ver=3"></script>
 </body>
 </html>
