@@ -12,14 +12,20 @@ class SqlitePresenter implements PresenterInterface
      */
     protected PDO $db;
 
+	/**
+	 * Runway Config
+	 */
+	protected array $config;
+
     /**
      * Constructor
      *
-     * @param string $dsn PDO connection dsn
+     * @param array $config Runway Config
      */
-    public function __construct(string $dsn)
+    public function __construct(array $config)
     {
-        $this->db = new PDO($dsn, null, null, [
+		$this->config = $config;
+        $this->db = new PDO($config['apm']['dest_db_dsn'], null, null, [
 			PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
 			PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
 			PDO::ATTR_EMULATE_PREPARES => false
@@ -483,6 +489,8 @@ class SqlitePresenter implements PresenterInterface
         $stmt = $this->db->prepare($requestQuery);
         $stmt->execute($paginatedRequestIds);
         $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+		$shouldMaskIp = $this->shouldMaskIpAddresses();
         
         // Fetch details for each request
         foreach ($requests as &$request) {
@@ -490,7 +498,7 @@ class SqlitePresenter implements PresenterInterface
             $request = array_merge($request, $details);
 
             // Mask IP address if the option is enabled
-            if ($this->shouldMaskIpAddresses()) {
+            if ($shouldMaskIp === true) {
                 $request['ip'] = $this->maskIpAddress($request['ip']);
             }
         }

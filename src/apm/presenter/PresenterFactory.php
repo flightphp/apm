@@ -22,7 +22,7 @@ class PresenterFactory extends ApmFactoryAbstract
         $storageType = $runwayConfig['apm']['storage_type'];
 		switch($storageType) {
 			case 'sqlite':
-				return new SqlitePresenter($runwayConfig['apm']['dest_db_dsn']);
+				return new SqlitePresenter($runwayConfig);
 			default:
 				throw new InvalidArgumentException("Unsupported storage type: $storageType");
 		}
