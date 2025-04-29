@@ -23,7 +23,7 @@ class LoggerFactory extends ApmFactoryAbstract
         $storageType = $runwayConfig['apm']['source_type'];
 		switch($storageType) {
 			case 'sqlite':
-				return new SqliteLogger($runwayConfig['apm']['dest_db_dsn']);
+				return new SqliteLogger($runwayConfig['apm']['source_db_dsn']);
 			default:
 				throw new InvalidArgumentException("Unsupported storage type: $storageType");
 		}
