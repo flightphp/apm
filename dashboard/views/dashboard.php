@@ -364,6 +364,6 @@
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Dashboard Logic -->
-    <script src="/js/script.js?ver=3"></script>
+    <script src="/js/script.js?ver=4"></script>
 </body>
 </html>

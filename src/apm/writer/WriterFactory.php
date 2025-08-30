@@ -4,6 +4,7 @@ namespace flight\apm\writer;
 
 use flight\apm\ApmFactoryAbstract;
 use InvalidArgumentException;
+use PDO;
 
 class WriterFactory extends ApmFactoryAbstract
 {
@@ -20,10 +21,23 @@ class WriterFactory extends ApmFactoryAbstract
 		}
 		$runwayConfig = self::loadConfig($runwayConfigPath);
 
-        $storageType = $runwayConfig['apm']['storage_type'];
+		$dsn = $runwayConfig['apm']['dest_db_dsn'] ?? '';
+		$options = $runwayConfig['apm']['dest_db_options'] ?: [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_TIMEOUT => 5,
+            PDO::ATTR_EMULATE_PREPARES => false,
+        ];
+		$storageType = $runwayConfig['apm']['storage_type'];
 		switch($storageType) {
 			case 'sqlite':
-				return new SqliteWriter($runwayConfig['apm']['dest_db_dsn']);
+				$pdo = new PDO($dsn, null, null, $options);
+				return new SqliteWriter($pdo);
+			case 'mysql':
+				$user = $runwayConfig['apm']['dest_db_user'] ?? null;
+				$pass = $runwayConfig['apm']['dest_db_pass'] ?? null;
+				$pdo = new PDO($dsn, $user, $pass, $options);
+				return new MysqlWriter($pdo);
 			default:
 				throw new InvalidArgumentException("Unsupported storage type: $storageType");
 		}

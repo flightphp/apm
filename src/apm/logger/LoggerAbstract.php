@@ -12,31 +12,27 @@ use PDOException;
  *
  * Handles storing application performance metrics in a database table
  */
-abstract class DatabaseLoggerAbstract
+abstract class LoggerAbstract
 {
     /**
      * PDO database connection instance
      *
      * @var PDO
      */
-    protected PDO $pdo;
+    protected $pdo;
+
+	/**
+     * Constructor for the database logger
+     *
+     * Initializes the PDO connection and ensures the required table exists
+     *
+     * @param PDO $pdo PDO database connection instance
+     */
+    public function __construct(PDO $pdo)
+    {
+        $this->pdo = $pdo;
+    }
     
-    /**
-     * Flag indicating whether the required database table exists
-     *
-     * @var bool
-     */
-    protected bool $tableCreated = false;
-
-    /**
-     * Abstract method to ensure the metrics table exists
-     *
-     * Implementations should create the table if it doesn't exist
-     *
-     * @return void
-     */
-    abstract protected function ensureTableExists(): void;
-
     /**
      * Logs performance metrics to the database
      *

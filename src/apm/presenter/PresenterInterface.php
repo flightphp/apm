@@ -29,7 +29,7 @@ interface PresenterInterface
      * @param string $requestId The request ID
      * @return array Request details including middleware, queries, errors, cache operations, and custom events
      */
-    public function getRequestDetails(string $requestId): array;
+    public function getRequestDetails(int $requestId): array;
 
 	/**
      * Get available event keys for search filters

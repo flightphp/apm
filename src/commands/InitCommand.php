@@ -64,13 +64,12 @@ class InitCommand extends AbstractBaseCommand
         $io->cyan('This wizard will help you configure source and storage settings for APM.', true);
         
         // SOURCE CONFIGURATION
-        $io->boldCyan('Source Configuration (where to read metrics from)', true);
-        
+        $io->boldCyan('Source Configuration (where to store logs and read metrics from)', true);
+
         // Select source type
         $sourceTypes = [
             '1' => 'sqlite',
-            // '2' => 'file',
-            // '3' => 'mysql',
+            '2' => 'mysql',
             // '4' => 'timescaledb'
         ];
         
@@ -80,35 +79,36 @@ class InitCommand extends AbstractBaseCommand
         
         // Configure source based on type
         switch ($sourceType) {
-            case 'file':
-                $apmConfig['source_path'] = $io->prompt('Enter the path to read the metrics log file:', '/tmp/apm_metrics.json');
-                if(!file_exists($apmConfig['source_path'])) {
-                    $io->error('The specified file does not exist. Please check the path and try again.', true);
-                    return;
-                }
-                break;
+            // case 'file':
+            //     $apmConfig['source_path'] = $io->prompt('Enter the path to read the metrics log file:', '/tmp/apm_metrics.json');
+            //     if(!file_exists($apmConfig['source_path'])) {
+            //         $io->error('The specified file does not exist. Please check the path and try again.', true);
+            //         return;
+            //     }
+            //     break;
                 
             case 'sqlite':
                 $apmConfig['source_db_dsn'] = $io->prompt('Enter the SQLite DSN for the apm_metrics_log table:', 'sqlite:/tmp/apm_metrics.sqlite');
                 if(strpos($apmConfig['source_db_dsn'], 'sqlite:') === false) {
                     $apmConfig['source_db_dsn'] = 'sqlite:' . $apmConfig['source_db_dsn'];
                 }
-                $apmConfig['source_table'] = $io->prompt('Enter the SQLite table name containing the metrics:', 'apm_metrics_log');
                 break;
                 
             case 'mysql':
                 $apmConfig['source_db_dsn'] = $io->prompt('Enter the MySQL DSN for the database that has the apm_metrics_log table:', 'mysql:host=localhost;dbname=apm');
                 $apmConfig['source_db_user'] = $io->prompt('Enter the MySQL username for the database that has the apm_metrics_log table:', 'root');
                 $apmConfig['source_db_pass'] = $io->prompt('Enter the MySQL password for the database that has the apm_metrics_log table:', '');
-                $apmConfig['source_table'] = $io->prompt('Enter the MySQL table name containing the metrics:', 'apm_metrics_log');
+                $optionsJson = $io->prompt('Enter any PDO options for MySQL as a JSON object (e.g. {"PDO::ATTR_ERRMODE":3}):', '{}');
+                $apmConfig['source_db_options'] = json_decode($optionsJson, true) ?? [];
                 break;
                 
-            case 'timescaledb':
-                $apmConfig['source_db_dsn'] = $io->prompt('Enter the source TimescaleDB DSN for the database that has the apm_metrics_log table:', 'pgsql:host=localhost;dbname=apm');
-                $apmConfig['source_db_user'] = $io->prompt('Enter the source TimescaleDB username for the database that has the apm_metrics_log table:', 'postgres');
-                $apmConfig['source_db_pass'] = $io->prompt('Enter the source TimescaleDB password for the database that has the apm_metrics_log table:', '');
-                $apmConfig['source_table'] = $io->prompt('Enter the TimescaleDB table name containing the metrics:', 'apm_metrics_log');
-                break;
+            // case 'timescaledb':
+            //     $apmConfig['source_db_dsn'] = $io->prompt('Enter the source TimescaleDB DSN for the database that has the apm_metrics_log table:', 'pgsql:host=localhost;dbname=apm');
+            //     $apmConfig['source_db_user'] = $io->prompt('Enter the source TimescaleDB username for the database that has the apm_metrics_log table:', 'postgres');
+            //     $apmConfig['source_db_pass'] = $io->prompt('Enter the source TimescaleDB password for the database that has the apm_metrics_log table:', '');
+            //     $optionsJson = $io->prompt('Enter any PDO options for TimescaleDB as a JSON object (e.g. {"PDO::ATTR_ERRMODE":3}):', '{}');
+            //     $apmConfig['source_db_options'] = json_decode($optionsJson, true) ?? [];
+            //     break;
         }
         
         // DESTINATION CONFIGURATION
@@ -117,8 +117,7 @@ class InitCommand extends AbstractBaseCommand
         // Select storage type
         $storageTypes = [
             '1' => 'sqlite',
-            // '2' => 'file',
-            // '3' => 'mysql',
+            '2' => 'mysql',
             // '4' => 'timescaledb'
         ];
         
@@ -147,13 +146,17 @@ class InitCommand extends AbstractBaseCommand
                 $apmConfig['dest_db_dsn'] = $io->prompt('Enter the MySQL DSN for where the APM data will be stored:', 'mysql:host=localhost;dbname=apm_processed');
                 $apmConfig['dest_db_user'] = $io->prompt('Enter the MySQL username for where the APM data will be stored:', 'root');
                 $apmConfig['dest_db_pass'] = $io->prompt('Enter the MySQL password for where the APM data will be stored:', '');
+                $optionsJson = $io->prompt('Enter any PDO options for MySQL as a JSON object (e.g. {"PDO::ATTR_ERRMODE":3}):', '{}');
+                $apmConfig['dest_db_options'] = json_decode($optionsJson, true) ?? [];
                 break;
                 
-            case 'timescaledb':
-                $apmConfig['dest_db_dsn'] = $io->prompt('Enter the TimescaleDB DSN for where the APM data will be stored:', 'pgsql:host=localhost;dbname=apm_processed');
-                $apmConfig['dest_db_user'] = $io->prompt('Enter the TimescaleDB username for where the APM data will be stored:', 'postgres');
-                $apmConfig['dest_db_pass'] = $io->prompt('Enter the TimescaleDB password for where the APM data will be stored:', '');
-                break;
+            // case 'timescaledb':
+            //     $apmConfig['dest_db_dsn'] = $io->prompt('Enter the TimescaleDB DSN for where the APM data will be stored:', 'pgsql:host=localhost;dbname=apm_processed');
+            //     $apmConfig['dest_db_user'] = $io->prompt('Enter the TimescaleDB username for where the APM data will be stored:', 'postgres');
+            //     $apmConfig['dest_db_pass'] = $io->prompt('Enter the TimescaleDB password for where the APM data will be stored:', '');
+            //     $optionsJson = $io->prompt('Enter any PDO options for TimescaleDB as a JSON object (e.g. {"PDO::ATTR_ERRMODE":3}):', '{}');
+            //     $apmConfig['dest_db_options'] = json_decode($optionsJson, true) ?? [];
+            //     break;
         }
         
         // Save the configuration
@@ -179,11 +182,8 @@ class InitCommand extends AbstractBaseCommand
 			return;
 		}
 
-
 		$io->info('Running migration...', true);
-
 		$this->app()->handle([ 'vendor/bin/runway', 'apm:migrate', '--config-file', $configFile ]);
-
 		$io->boldGreen('Migration completed successfully!', true);
     }
 }

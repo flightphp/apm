@@ -236,7 +236,7 @@ function populateRequestLog(requests) {
         const time = parseFloat(r.total_time) * 1000;
         
         // Convert UTC timestamp to selected timezone
-        const formattedTimestamp = formatTimestamp(r.timestamp);
+        const formattedTimestamp = formatTimestamp(r.request_dt);
         
         // Build details sections conditionally
         let detailSections = [];
@@ -364,7 +364,7 @@ function populateRequestLog(requests) {
                                 <h2 class="accordion-header" id="event-heading-${index}-${eventIndex}">
                                     <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#event-collapse-${index}-${eventIndex}" aria-expanded="false" aria-controls="event-collapse-${index}-${eventIndex}">
                                         <span class="badge bg-info me-2">${event.type}</span>
-                                        <small class="text-muted">${new Date(parseFloat(event.timestamp) * 1000).toISOString().split('T')[1].replace('Z', '')}</small>
+                                        <small class="text-muted">${new Date(parseFloat(event.event_dt) * 1000).toISOString().split('T')[1].replace('Z', '')}</small>
                                     </button>
                                 </h2>
                                 <div id="event-collapse-${index}-${eventIndex}" class="accordion-collapse collapse" aria-labelledby="event-heading-${index}-${eventIndex}" data-bs-parent="#customEventsAccordion-${index}">
@@ -507,7 +507,7 @@ function drawLatencyChart(data) {
     latencyChart = new Chart(ctxLatency, {
         type: 'line',
         data: {
-            labels: chartData.map(d => d.timestamp),
+            labels: chartData.map(d => d.request_dt),
             datasets: [{
                 label: 'Average Latency (ms)',
                 data: chartData.map(d => d.average_time * 1000),
@@ -593,7 +593,7 @@ function updateResponseCodeChart(responseData) {
     }
 
     // Extract all unique response codes
-    const responseCodes = [...new Set(responseData.flatMap(d => Object.keys(d).filter(k => k !== 'timestamp')))];
+    const responseCodes = [...new Set(responseData.flatMap(d => Object.keys(d).filter(k => k !== 'request_dt')))];
     
     // Create datasets for each response code
     const datasets = responseCodes.map(code => {
@@ -620,7 +620,7 @@ function updateResponseCodeChart(responseData) {
     responseCodeChart = new Chart(ctxResponse, {
         type: 'bar',
         data: {
-            labels: responseData.map(d => d.timestamp),
+            labels: responseData.map(d => d.request_dt),
             datasets: datasets
         },
         options: {

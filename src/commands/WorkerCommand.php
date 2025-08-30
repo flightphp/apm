@@ -10,17 +10,6 @@ use flight\apm\writer\WriterFactory;
 /**
  * WorkerCommand
  * 
- * @property-read ?string $sourceType
- * @property-read ?string $destType
- * @property-read ?string $sourceDbDsn
- * @property-read ?string $sourceDbUser
- * @property-read ?string $sourceDbPass
- * @property-read ?string $sourceTable
- * @property-read ?string $sourceFilePath
- * @property-read ?string $destDbDsn
- * @property-read ?string $destDbUser
- * @property-read ?string $destDbPass
- * @property-read ?string $destFilePath
  * @property-read ?int $timeout
  * @property-read ?int $maxMessages
  * @property-read ?bool $daemon
@@ -34,17 +23,6 @@ class WorkerCommand extends AbstractBaseCommand
      * @var array<string,mixed>
      */
     protected array $defaults = [
-        'sourceType' => 'sqlite',
-        'destType' => 'sqlite',
-        'sourceDbDsn' => 'sqlite:/tmp/apm_metrics_log.sqlite',
-        'sourceDbUser' => '',
-        'sourceDbPass' => '',
-        'sourceTable' => 'apm_metrics_log',
-        'sourceFilePath' => '/tmp/apm_metrics_log.json',
-        'destDbDsn' => 'sqlite:/tmp/apm_metrics.sqlite',
-        'destDbUser' => '',
-        'destDbPass' => '',
-        'destFilePath' => '/tmp/apm_metrics.json',
         'timeout' => 0,
         'maxMessages' => 0,
         'batchSize' => 100
@@ -106,23 +84,35 @@ class WorkerCommand extends AbstractBaseCommand
     {
         $io = $this->app()->io();
 
-        // Merge defaults with config and command line options
-        $options = $this->getWorkerOptions();
+		if(empty($this->configFile)) {
+			$runwayConfigPath = $this->autoLocateRunwayConfigPath();
+		} else {
+			$runwayConfigPath = $this->configFile;
+			if(!file_exists($runwayConfigPath)) {
+				$io->red("Runway config file not found at: " . $runwayConfigPath, true);
+				return;
+			}
+		}
+
+		$runwayConfig = json_decode(file_get_contents($runwayConfigPath), true);
+
+		// Merge defaults with config and command line options
+        $options = $this->getWorkerOptions($runwayConfig);
         
         // Display configuration
         $io->bold('Starting APM metrics worker with configuration:', true);
         $io->table([
             [
                 'Setting' => 'Source Type',
-                'Value' => $options['sourceType']
+                'Value' => $options['source_type']
             ],
             [
                 'Setting' => 'Destination Type',
-                'Value' => $options['destType']
+                'Value' => $options['storage_type']
             ],
             [
                 'Setting' => 'Batch Size',
-                'Value' => $options['batchSize']
+                'Value' => $options['batch_size'] > 0 ? $options['batch_size'] : ($options['batchSize'] ?? 'All available')
             ],
             [
                 'Setting' => 'Timeout',
@@ -140,15 +130,6 @@ class WorkerCommand extends AbstractBaseCommand
             'head' => 'boldGreen'
         ]);
 
-		if(empty($this->configFile)) {
-			$runwayConfigPath = $this->autoLocateRunwayConfigPath();
-		} else {
-			$runwayConfigPath = $this->configFile;
-			if(!file_exists($runwayConfigPath)) {
-				$io->red("Runway config file not found at: " . $runwayConfigPath, true);
-				return;
-			}
-		}
 
         try {
             // Setup source reader
@@ -250,27 +231,17 @@ class WorkerCommand extends AbstractBaseCommand
      *
      * @return array<string,mixed>
      */
-    protected function getWorkerOptions(): array
+    protected function getWorkerOptions(array $runwayConfig): array
     {
-        $options = [];
+        $options = $runwayConfig['apm'];
         
         // Map command-line option names to property names
         $optionToPropertyMap = [
-            'source_type' => 'sourceType',
-            'dest_type' => 'destType',
-            'source_db_dsn' => 'sourceDbDsn',
-            'source_db_user' => 'sourceDbUser',
-            'source_db_pass' => 'sourceDbPass',
-            'source_table' => 'sourceTable',
-            'source_file_path' => 'sourceFilePath',
-            'dest_db_dsn' => 'destDbDsn',
-            'dest_db_user' => 'destDbUser',
-            'dest_db_pass' => 'destDbPass',
-            'dest_file_path' => 'destFilePath',
             'timeout' => 'timeout',
             'max_messages' => 'maxMessages',
             'batch_size' => 'batchSize'
         ];
+		
         // Start with defaults
         foreach ($this->defaults as $key => $value) {
 
@@ -293,7 +264,7 @@ class WorkerCommand extends AbstractBaseCommand
                 $options[$key] = $this->storageConfig[$snake_key];
             }
             // Fall back to defaults
-            else {
+            else if(empty($options[$key])) {
                 $options[$key] = $value;
             }
         }

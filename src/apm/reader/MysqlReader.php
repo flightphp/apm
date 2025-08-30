@@ -1,16 +1,13 @@
 <?php
-
-declare(strict_types=1);
-
 namespace flight\apm\reader;
 
 use PDO;
+use flight\apm\reader\ReaderInterface;
 
-class SqliteReader extends ReaderAbstract implements ReaderInterface
+class MysqlReader extends ReaderAbstract implements ReaderInterface
 {
-
     /**
-     * Create a new SQLite reader
+     * Create a new MySQL reader
      *
      * @param PDO $pdo PDO instance for database access
      */

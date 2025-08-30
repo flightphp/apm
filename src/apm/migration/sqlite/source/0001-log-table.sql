@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS apm_metrics_log (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	added_dt DATETIME DEFAULT CURRENT_TIMESTAMP,
+	metrics_json TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_added_dt ON apm_metrics_log (added_dt);

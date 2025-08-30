@@ -49,16 +49,6 @@ class Apm
     }
 
 	/**
-	 * Generates a unique request ID.
-	 * 
-	 * @return string
-	 */
-	public function generateRequestId(): string
-	{
-		return uniqid('req_', true);
-	}
-
-	/**
 	 * Registers the events for the application performance monitoring (APM) system.
 	 *
 	 * This method sets up the necessary event listeners and handlers to monitor
@@ -92,14 +82,14 @@ class Apm
 
         $dispatcher->on('flight.request.received', function (Request $request) use ($app) {
 			// Generate request ID early and store it
-			$requestId = $this->generateRequestId();
-			$this->metrics['request_id'] = $requestId;
+			$requestToken = $this->generateRequestToken();
+			$this->metrics['request_token'] = $requestToken;
 
 			// Make request ID accessible on the request object
-			$app->response()->setHeader('X-Flight-Request-Id', $requestId);
+			$app->response()->setHeader('X-Flight-Request-Id', $requestToken);
 
 			// Register in Flight's shared variable space for easy access
-			$app->set('apm.request_id', $requestId);
+			$app->set('apm.request_id', $requestToken);
 
             $this->metrics['start_time'] = microtime(true);
             $this->metrics['start_memory'] = memory_get_usage();
@@ -257,8 +247,18 @@ class Apm
 	 * 
 	 * @return string|null The request ID or null if not set.
 	 */
+	public function generateRequestToken(): ?string
+	{
+		return $this->metrics['request_token'] ?? null;
+	}
+
+	/**
+	 * Gets the current request ID.
+	 * 
+	 * @return string|null The request ID or null if not set.
+	 */
 	public function getRequestId(): ?string
 	{
-		return $this->metrics['request_id'] ?? null;
+		return $this->metrics['request_token'] ?? null;
 	}
 }
