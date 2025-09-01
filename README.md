@@ -67,6 +67,13 @@ The worker processes your metrics—here’s how to keep it humming:
 - PHP 7.4 or higher
 - [FlightPHP Core](https://github.com/flightphp/core) v3.15+
 
+## Supported Databases
+
+FlightPHP APM currently supports the following databases for storing metrics:
+
+- **SQLite3**
+- **MySQL/MariaDB**
+
 ## Documentation
 
 Want the full scoop? Check out the [FlightPHP APM Documentation](https://docs.flightphp.com/awesome-plugins/apm) for setup details, worker options, dashboard tricks, and more!
