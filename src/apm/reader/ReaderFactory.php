@@ -24,7 +24,7 @@ class ReaderFactory extends ApmFactoryAbstract
 
 		$storageType = $runwayConfig['apm']['source_type'];
 		$dsn = $runwayConfig['apm']['source_db_dsn'] ?? '';
-		$options = $runwayConfig['apm']['source_db_options'] ?: [
+		$options = !empty($runwayConfig['apm']['source_db_options']) ? $runwayConfig['apm']['source_db_options'] : [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_TIMEOUT => 5,

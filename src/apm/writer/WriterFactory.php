@@ -22,7 +22,7 @@ class WriterFactory extends ApmFactoryAbstract
 		$runwayConfig = self::loadConfig($runwayConfigPath);
 
 		$dsn = $runwayConfig['apm']['dest_db_dsn'] ?? '';
-		$options = $runwayConfig['apm']['dest_db_options'] ?: [
+		$options = !empty($runwayConfig['apm']['dest_db_options']) ? $runwayConfig['apm']['dest_db_options'] : [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_TIMEOUT => 5,

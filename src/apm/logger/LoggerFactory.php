@@ -25,7 +25,7 @@ class LoggerFactory extends ApmFactoryAbstract
 
 		$dsn = $runwayConfig['apm']['source_db_dsn'];
 		$storageType = $runwayConfig['apm']['source_type'];
-		$options = $runwayConfig['apm']['source_db_options'] ?: [
+		$options = !empty($runwayConfig['apm']['source_db_options']) ? $runwayConfig['apm']['source_db_options'] : [
 			PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
 			PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
 			PDO::ATTR_EMULATE_PREPARES => false,

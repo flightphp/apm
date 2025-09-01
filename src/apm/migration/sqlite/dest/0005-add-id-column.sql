@@ -2,83 +2,129 @@
 
 DROP TABLE IF EXISTS apm_requests_new;
 
--- 1. Create new table with correct schema
-CREATE TABLE apm_requests_new (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	request_token TEXT NOT NULL,
-	request_dt TEXT NOT NULL,
-	request_method TEXT,
-	request_url TEXT,
-	total_time REAL,
-	peak_memory INTEGER,
-	response_code INTEGER,
-	response_size INTEGER,
-	response_build_time REAL,
-	is_bot INTEGER DEFAULT 0,
-	ip TEXT,
-	user_agent TEXT,
-	host TEXT,
-	session_id TEXT
+-- IMPORTANT: The old request_id was TEXT (UUID/token). After migration, all child tables must reference the new INTEGER id from apm_requests.
+-- To do this, create a mapping table during migration, then update all child tables to use the new id.
+
+-- 0. Create a mapping table to store old request_id (TEXT) and new id (INTEGER)
+CREATE TABLE apm_requests_id_map (
+    old_request_id TEXT PRIMARY KEY,
+    new_id INTEGER
 );
 
--- 1.5 Do performance enhancements to insert quickly
-PRAGMA synchronous = OFF;
-PRAGMA journal_mode = OFF;
+-- 1. Create new apm_requests table and insert data
+CREATE TABLE apm_requests_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_token TEXT NOT NULL,
+    request_dt TEXT NOT NULL,
+    request_method TEXT,
+    request_url TEXT,
+    total_time REAL,
+    peak_memory INTEGER,
+    response_code INTEGER,
+    response_size INTEGER,
+    response_build_time REAL,
+    is_bot INTEGER DEFAULT 0,
+    ip TEXT,
+    user_agent TEXT,
+    host TEXT,
+    session_id TEXT
+);
 
-
--- 2. Copy data from old table to new table
 INSERT INTO apm_requests_new (
-	request_token,
-	request_dt,
-	request_method,
-	request_url,
-	total_time,
-	peak_memory,
-	response_code,
-	response_size,
-	response_build_time,
-	is_bot,
-	ip,
-	user_agent,
-	host,
-	session_id
+    request_token,
+    request_dt,
+    request_method,
+    request_url,
+    total_time,
+    peak_memory,
+    response_code,
+    response_size,
+    response_build_time,
+    is_bot,
+    ip,
+    user_agent,
+    host,
+    session_id
 )
 SELECT 
-	request_id,
-	timestamp,
-	request_method,
-	request_url,
-	total_time,
-	peak_memory,
-	response_code,
-	response_size,
-	response_build_time,
-	is_bot,
-	ip,
-	user_agent,
-	host,
-	session_id
+    request_id,
+    timestamp,
+    request_method,
+    request_url,
+    total_time,
+    peak_memory,
+    response_code,
+    response_size,
+    response_build_time,
+    is_bot,
+    ip,
+    user_agent,
+    host,
+    session_id
 FROM apm_requests;
 
--- 3. Drop old table
-DROP TABLE apm_requests;
+-- 2. Populate mapping table
+INSERT INTO apm_requests_id_map (old_request_id, new_id)
+SELECT request_token, id FROM apm_requests_new;
 
--- 4. Rename new table to original name
+-- 3. Drop old table and rename new table
+DROP TABLE apm_requests;
 ALTER TABLE apm_requests_new RENAME TO apm_requests;
 
--- 5. Create index on request_id (now token)
-CREATE INDEX idx_apm_requests_request_id ON apm_requests(request_token);
-CREATE INDEX IF NOT EXISTS idx_apm_requests_request_dt ON apm_requests(request_dt);
-CREATE INDEX IF NOT EXISTS idx_apm_requests_url ON apm_requests(request_url);
-CREATE INDEX IF NOT EXISTS idx_apm_requests_response_code ON apm_requests(response_code);
-CREATE INDEX IF NOT EXISTS idx_apm_requests_composite ON apm_requests(request_dt, response_code, request_method);
-CREATE INDEX IF NOT EXISTS idx_apm_requests_ip ON apm_requests(ip);
-CREATE INDEX IF NOT EXISTS idx_apm_requests_host ON apm_requests(host);
-CREATE INDEX IF NOT EXISTS idx_apm_requests_session_id ON apm_requests(session_id);
--- Index on user_agent can help with bot filtering
-CREATE INDEX IF NOT EXISTS idx_apm_requests_user_agent ON apm_requests(user_agent);
+-- 4. Update all child tables: Convert request_id from old TEXT token to new INTEGER id using the mapping table
+-- This must be done before migrating child tables to INTEGER request_id
 
+-- apm_custom_events
+UPDATE apm_custom_events SET request_id = (
+  SELECT new_id FROM apm_requests_id_map WHERE old_request_id = apm_custom_events.request_id
+) WHERE request_id IN (SELECT old_request_id FROM apm_requests_id_map);
 
+-- apm_routes
+UPDATE apm_routes SET request_id = (
+  SELECT new_id FROM apm_requests_id_map WHERE old_request_id = apm_routes.request_id
+) WHERE request_id IN (SELECT old_request_id FROM apm_requests_id_map);
+
+-- apm_middleware
+UPDATE apm_middleware SET request_id = (
+  SELECT new_id FROM apm_requests_id_map WHERE old_request_id = apm_middleware.request_id
+) WHERE request_id IN (SELECT old_request_id FROM apm_requests_id_map);
+
+-- apm_views
+UPDATE apm_views SET request_id = (
+  SELECT new_id FROM apm_requests_id_map WHERE old_request_id = apm_views.request_id
+) WHERE request_id IN (SELECT old_request_id FROM apm_requests_id_map);
+
+-- apm_db_connections
+UPDATE apm_db_connections SET request_id = (
+  SELECT new_id FROM apm_requests_id_map WHERE old_request_id = apm_db_connections.request_id
+) WHERE request_id IN (SELECT old_request_id FROM apm_requests_id_map);
+
+-- apm_db_queries
+UPDATE apm_db_queries SET request_id = (
+  SELECT new_id FROM apm_requests_id_map WHERE old_request_id = apm_db_queries.request_id
+) WHERE request_id IN (SELECT old_request_id FROM apm_requests_id_map);
+
+-- apm_errors
+UPDATE apm_errors SET request_id = (
+  SELECT new_id FROM apm_requests_id_map WHERE old_request_id = apm_errors.request_id
+) WHERE request_id IN (SELECT old_request_id FROM apm_requests_id_map);
+
+-- apm_cache
+UPDATE apm_cache SET request_id = (
+  SELECT new_id FROM apm_requests_id_map WHERE old_request_id = apm_cache.request_id
+) WHERE request_id IN (SELECT old_request_id FROM apm_requests_id_map);
+
+-- apm_raw_metrics
+UPDATE apm_raw_metrics SET request_id = (
+  SELECT new_id FROM apm_requests_id_map WHERE old_request_id = apm_raw_metrics.request_id
+) WHERE request_id IN (SELECT old_request_id FROM apm_requests_id_map);
+
+-- apm_custom_event_data
+UPDATE apm_custom_event_data SET request_id = (
+  SELECT new_id FROM apm_requests_id_map WHERE old_request_id = apm_custom_event_data.request_id
+) WHERE request_id IN (SELECT old_request_id FROM apm_requests_id_map);
+
+-- Now proceed with child table migrations
 
 -- And now we need to fix custom requests
 CREATE TABLE IF NOT EXISTS apm_custom_events (
@@ -272,7 +318,8 @@ CREATE INDEX IF NOT EXISTS idx_apm_cache_hit ON apm_cache(hit);
 -- Raw metrics table migration
 --
 CREATE TABLE apm_raw_metrics_new (
-    request_id INTEGER PRIMARY KEY,
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_id INTEGER NOT NULL,
     metrics_json TEXT NOT NULL,
     FOREIGN KEY (request_id) REFERENCES apm_requests(id) ON DELETE CASCADE
 );
@@ -282,6 +329,7 @@ INSERT INTO apm_raw_metrics_new (
 SELECT request_id, metrics_json FROM apm_raw_metrics;
 DROP TABLE apm_raw_metrics;
 ALTER TABLE apm_raw_metrics_new RENAME TO apm_raw_metrics;
+CREATE INDEX IF NOT EXISTS idx_apm_raw_metrics_request_id ON apm_raw_metrics(request_id);
 
 -- Migration for apm_custom_event_data table to use INTEGER request_id
 CREATE TABLE apm_custom_event_data_new (
@@ -303,5 +351,6 @@ CREATE INDEX IF NOT EXISTS idx_apm_custom_event_data_event_id ON apm_custom_even
 CREATE INDEX IF NOT EXISTS idx_apm_custom_event_data_request_id ON apm_custom_event_data(request_id);
 CREATE INDEX IF NOT EXISTS idx_apm_custom_event_data_key ON apm_custom_event_data(json_key);
 
+DROP TABLE apm_requests_id_map;
 
 VACUUM;
