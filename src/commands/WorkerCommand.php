@@ -101,6 +101,7 @@ class WorkerCommand extends AbstractBaseCommand
         
         // Display configuration
         $io->bold('Starting APM metrics worker with configuration:', true);
+		$batchSize = $options['batch_size'] > 0 ? $options['batch_size'] : ($options['batchSize'] ?? 'All available');
         $io->table([
             [
                 'Setting' => 'Source Type',
@@ -112,7 +113,7 @@ class WorkerCommand extends AbstractBaseCommand
             ],
             [
                 'Setting' => 'Batch Size',
-                'Value' => $options['batch_size'] > 0 ? $options['batch_size'] : ($options['batchSize'] ?? 'All available')
+                'Value' => $batchSize
             ],
             [
                 'Setting' => 'Timeout',
