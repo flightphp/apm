@@ -74,7 +74,7 @@ class PurgeCommand extends AbstractBaseCommand
 
         try {
             // Delete old records from apm_requests
-            $stmt = $db->prepare("DELETE FROM apm_requests WHERE timestamp < :cutoff_date");
+            $stmt = $db->prepare("DELETE FROM apm_requests WHERE request_dt < :cutoff_date");
             $stmt->bindParam(':cutoff_date', $cutoffDate);
             $stmt->execute();
             

@@ -74,11 +74,6 @@ class ApmDashboardCommand extends Command
         $io->green("Running: $command", true);
         
         // Execute the PHP server command
-		// $shell = new Shell($command);
-		// $shell->setOptions(getcwd());
-		// $shell->execute();
-		// echo $shell->getOutput();
-		// echo $shell->getErrorOutput();
         passthru($command);
     }
 }
