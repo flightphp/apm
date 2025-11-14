@@ -12,16 +12,11 @@ class ReaderFactory extends ApmFactoryAbstract
     /**
      * Create a reader based on the database connection
      *
-     * @param string|null $runwayConfigPath Path to the runway config file
+     * @param array $runwayConfig The runway config array
      * @return ReaderInterface A reader implementation
      */
-    public static function create(?string $runwayConfigPath = null): ReaderInterface
+    public static function create(array $runwayConfig): ReaderInterface
     {
-		if ($runwayConfigPath === null) {
-			$runwayConfigPath = self::autoLocateRunwayConfigPath();
-		}
-		$runwayConfig = self::loadConfig($runwayConfigPath);
-
 		$storageType = $runwayConfig['apm']['source_type'];
 		$dsn = $runwayConfig['apm']['source_db_dsn'] ?? '';
 		$options = !empty($runwayConfig['apm']['source_db_options']) ? $runwayConfig['apm']['source_db_options'] : [

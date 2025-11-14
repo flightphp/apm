@@ -51,30 +51,10 @@ class WorkerCommand extends AbstractBaseCommand
         $this->option('--batch_size batch_size', 'Number of messages to process per batch');
 
 		 // Add option for config file path
-		$this->option('--config-file', 'Path to the runway config file', null, getcwd() . '/.runway-config.json');
+		$this->option('--config-file', 'Path to the runway config file (deprecated, use config.php instead)', null, getcwd() . '/.runway-config.json');
 
 	}
 
-	protected function autoLocateRunwayConfigPath(): string
-	{
-		$paths = [
-			getcwd().'/.runway-config.json',
-			__DIR__.'/../.runway-config.json',
-			__DIR__.'/../../.runway-config.json'
-		];
-
-		foreach ($paths as $path) {
-			if (file_exists($path) === true) {
-				return $path;
-			}
-		}
-
-		$interactor = $this->app()->io();
-		$interactor->red('Runway APM configuration not found. Please run "php vendor/bin/runway apm:init" first to configure the APM.', true);
-		$interactor->orange('Could not find .runway-config.json file. Please define the path to the config file for the Factory object. It should be in /path/to/project-root/.runway-config.json', true);
-		exit(1);
-	}
-	
     /**
      * Executes the worker command
      *
@@ -84,17 +64,14 @@ class WorkerCommand extends AbstractBaseCommand
     {
         $io = $this->app()->io();
 
-		if(empty($this->configFile)) {
-			$runwayConfigPath = $this->autoLocateRunwayConfigPath();
+		$configFile = $this->configFile;
+		if($configFile) {
+			$io = $this->app()->io();
+			$io->warn('The --config-file option is deprecated. Move your config values to the \'runway\' key in the config.php file for configuration.', true);
+			$runwayConfig = json_decode(file_get_contents($configFile), true) ?? [];
 		} else {
-			$runwayConfigPath = $this->configFile;
-			if(!file_exists($runwayConfigPath)) {
-				$io->red("Runway config file not found at: " . $runwayConfigPath, true);
-				return;
-			}
+			$runwayConfig = $this->config['runway'];
 		}
-
-		$runwayConfig = json_decode(file_get_contents($runwayConfigPath), true);
 
 		// Merge defaults with config and command line options
         $options = $this->getWorkerOptions($runwayConfig);
@@ -135,12 +112,12 @@ class WorkerCommand extends AbstractBaseCommand
         try {
             // Setup source reader
             $io->write('Setting up source reader... ');
-            $reader = ReaderFactory::create($runwayConfigPath);
+            $reader = ReaderFactory::create($runwayConfig);
             $io->green('Done!', true);
             
             // Setup destination storage
             $io->write('Setting up destination storage... ');
-            $storage = WriterFactory::create($runwayConfigPath);
+            $storage = WriterFactory::create($runwayConfig);
             $io->green('Done!', true);
 
             $io->bold('Processing metrics...', true);

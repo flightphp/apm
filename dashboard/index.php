@@ -28,7 +28,15 @@ $appRootPath = dirname($finalPath).'/../';
 $app = Flight::app();
 $app->set('flight.views.path', __DIR__.'/views');
 
-$presenter = PresenterFactory::create($appRootPath.'/.runway-config.json');
+if(file_exists($appRootPath.'/app/config/config.php') === true) {
+	$config = require($appRootPath.'/app/config/config.php');
+	$runwayConfig = $config['runway'] ?? [];
+} 
+
+if(empty($runwayConfig) && file_exists($appRootPath.'/.runway-config.json') === true) {
+	$runwayConfig = json_decode(file_get_contents($appRootPath.'/.runway-config.json'), true);
+}
+$presenter = PresenterFactory::create($runwayConfig);
 
 function calculateThreshold($range) {
     $map = [

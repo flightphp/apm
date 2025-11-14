@@ -21,7 +21,7 @@ class MigrateCommand extends AbstractBaseCommand
         parent::__construct('apm:migrate', 'Run database migrations for APM', $config);
         
         // Add option for config file path
-        $this->option('-c --config-file path', 'Path to the runway config file', null, getcwd() . '/.runway-config.json');
+        $this->option('-c --config-file path', 'Path to the runway config file (deprecated, use config.php instead)', null, getcwd() . '/.runway-config.json');
     }
 
     public function interact(Interactor $io): void
@@ -31,23 +31,18 @@ class MigrateCommand extends AbstractBaseCommand
 
     public function execute()
     {
-        $configFile = $this->configFile;
         $io = $this->app()->io();
 
-        // Check if config file exists
-        if (file_exists($configFile) === false) {
-            $io->error("Config file not found at {$configFile}", true);
-            return;
-        }
+        $configFile = $this->configFile;
+		if($configFile) {
+			$io = $this->app()->io();
+			$io->warn('The --config-file option is deprecated. Move your config values to the \'runway\' key in the config.php file for configuration.', true);
+			$runwayConfig = json_decode(file_get_contents($configFile), true) ?? [];
+		} else {
+			$runwayConfig = $this->config['runway'];
+		}
 
-        // Load config
-        $config = json_decode(file_get_contents($configFile), true) ?? [];
-        if (empty($config['apm'])) {
-            $io->error('APM configuration not found. Please run apm:init first.', true);
-            return;
-        }
-
-        $apmConfig = $config['apm'];
+        $apmConfig = $runwayConfig['apm'];
         $storageType = $apmConfig['storage_type'] ?? null;
 
         if (empty($storageType)) {

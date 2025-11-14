@@ -11,16 +11,11 @@ class WriterFactory extends ApmFactoryAbstract
     /**
      * Create a writer based on the database connection
      *
-     * @param string|null $runwayConfigPath Path to the runway config file
+     * @param array $runwayConfig The runway config array
      * @return WriterInterface A writer implementation
      */
-    public static function create(?string $runwayConfigPath = null): WriterInterface
+    public static function create(array $runwayConfig): WriterInterface
     {
-		if ($runwayConfigPath === null) {
-			$runwayConfigPath = self::autoLocateRunwayConfigPath();
-		}
-		$runwayConfig = self::loadConfig($runwayConfigPath);
-
 		$dsn = $runwayConfig['apm']['dest_db_dsn'] ?? '';
 		$options = !empty($runwayConfig['apm']['dest_db_options']) ? $runwayConfig['apm']['dest_db_options'] : [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
