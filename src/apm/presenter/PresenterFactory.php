@@ -12,15 +12,11 @@ class PresenterFactory extends ApmFactoryAbstract
     /**
      * Create a presenter based on the database connection
      *
-     * @param string|null $runwayConfigPath Path to the runway config file
+     * @param array $runwayConfig The runway config array
      * @return PresenterInterface A presenter implementation
      */
-    public static function create(string $runwayConfigPath): PresenterInterface
+    public static function create(array $runwayConfig): PresenterInterface
     {
-		if ($runwayConfigPath === null) {
-			$runwayConfigPath = self::autoLocateRunwayConfigPath();
-		}
-		$runwayConfig = self::loadConfig($runwayConfigPath);
 		$dsn = $runwayConfig['apm']['dest_db_dsn'] ?? '';
 		$options = !empty($runwayConfig['apm']['dest_db_options']) ? $runwayConfig['apm']['dest_db_options'] : [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,

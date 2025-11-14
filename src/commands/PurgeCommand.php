@@ -21,7 +21,7 @@ class PurgeCommand extends AbstractBaseCommand
         parent::__construct('apm:purge', 'Purge old APM data from storage', $config);
         
         // Add option for config file path
-        $this->option('-c --config-file path', 'Path to the runway config file', null, getcwd() . '/.runway-config.json');
+        $this->option('-c --config-file path', 'Path to the runway config file (deprecated, use config.php instead)', null, getcwd() . '/.runway-config.json');
         
         // Add option for days to keep (default 30)
         $this->option('-d --days int', 'Number of days of data to keep (older data will be purged)', null, 30);
@@ -34,18 +34,20 @@ class PurgeCommand extends AbstractBaseCommand
 
     public function execute()
     {
-        $configFile = $this->configFile;
+		$configFile = $this->configFile;
+		if($configFile) {
+			$io = $this->app()->io();
+			$io->warn('The --config-file option is deprecated. Move your config values to the \'runway\' key in the config.php file for configuration.', true);
+			$config = json_decode(file_get_contents($configFile), true) ?? [];
+		} else {
+			$config = $this->config['runway'];
+		}
+
         $daysToKeep = (int)$this->days;
         $io = $this->app()->io();
 
-        // Check if config file exists
-        if (file_exists($configFile) === false) {
-            $io->error("Config file not found at {$configFile}", true);
-            return;
-        }
-
         // Load config
-        $config = json_decode(file_get_contents($configFile), true) ?? [];
+        $config = $this->config['runway'];
         if (empty($config['apm'])) {
             $io->error('APM configuration not found. Please run apm:init first.', true);
             return;
@@ -125,16 +127,6 @@ class PurgeCommand extends AbstractBaseCommand
                     PDO::ATTR_EMULATE_PREPARES => false,
                 ]);
                 
-            case 'timescaledb':
-                $dsn = $config['dest_db_dsn'];
-                $user = $config['dest_db_user'];
-                $pass = $config['dest_db_pass'];
-                return new PDO($dsn, $user, $pass, [
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    PDO::ATTR_EMULATE_PREPARES => false,
-                ]);
-            
             default:
                 throw new \InvalidArgumentException("Unsupported storage type: {$storageType}");
         }

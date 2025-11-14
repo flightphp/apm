@@ -13,15 +13,19 @@ class LoggerFactory extends ApmFactoryAbstract
     /**
      * Create a logger based on the database connection
      *
-     * @param string|null $runwayConfigPath Path to the runway config file
+     * @param string|null|array $runwayConfig Path to the runway config file or the config array itself
      * @return LoggerInterface A logger implementation
      */
-    public static function create(?string $runwayConfigPath = null): LoggerInterface
+    public static function create($runwayConfig = null): LoggerInterface
     {
-		if ($runwayConfigPath === null) {
+		$runwayConfigPath = '';
+		if ($runwayConfig === null) {
 			$runwayConfigPath = self::autoLocateRunwayConfigPath();
 		}
-		$runwayConfig = self::loadConfig($runwayConfigPath);
+		if (is_string($runwayConfig) === true || $runwayConfigPath !== '') {
+			$runwayConfigPath = $runwayConfigPath !== '' ? $runwayConfigPath : $runwayConfig;
+			$runwayConfig = self::loadConfig($runwayConfigPath);
+		}
 
 		$dsn = $runwayConfig['apm']['source_db_dsn'];
 		$storageType = $runwayConfig['apm']['source_type'];

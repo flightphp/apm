@@ -17,14 +17,6 @@ class InitCommand extends AbstractBaseCommand
     public function __construct(array $config)
     {
         parent::__construct('apm:init', 'Initialize APM configuration', $config);
-        
-        // Add option for config file path
-        $this->option('-c --config-file path', 'Path to the runway config file', null, getcwd() . '/.runway-config.json');
-
-        // Set command help text
-        // $this->usage(
-        //     '<bold>  apm:init</end> <comment>--config-file /path/to/config.json</end> ## Initialize APM configuration'
-        // );
     }
 
     public function interact(Interactor $io): void
@@ -34,29 +26,23 @@ class InitCommand extends AbstractBaseCommand
 
     public function execute()
     {
-        $configFile = $this->configFile;
-        $this->runStorageConfigWalkthrough($configFile);
+        $this->runStorageConfigWalkthrough();
     }
 
-    protected function runStorageConfigWalkthrough(string $configFile): void
+    protected function runStorageConfigWalkthrough(): void
     {
-        $config = [];
         $io = $this->app()->io();
+		$config = $this->config['runway'];
         
-        // Load existing config if available
-        if (file_exists($configFile) === true) {
-            $config = json_decode(file_get_contents($configFile), true) ?? [];
-
-			// if $config['apm'] has something in there ask if they want to proceed
-			if (!empty($config['apm'])) {
-				$io->warn('APM configuration already exists.', true);
-				$overwrite = $io->prompt('Overwrite existing APM configuration? (y/n)', 'n');
-				if (strtolower($overwrite) !== 'y') {
-					$io->info('Exiting without changes.', true);
-					return;
-				}
+		// if $config['apm'] has something in there ask if they want to proceed
+		if (!empty($config['apm'])) {
+			$io->warn('APM configuration already exists.', true);
+			$overwrite = $io->prompt('Overwrite existing APM configuration? (y/n)', 'n');
+			if (strtolower($overwrite) !== 'y') {
+				$io->info('Exiting without changes.', true);
+				return;
 			}
-        }
+		}
         
         $apmConfig = $config['apm'] ?? [];
         
@@ -70,7 +56,6 @@ class InitCommand extends AbstractBaseCommand
         $sourceTypes = [
             '1' => 'sqlite',
             '2' => 'mysql',
-            // '4' => 'timescaledb'
         ];
         
         $choice = $io->choice('What type of source would you like to read from?', $sourceTypes, '1');
@@ -79,13 +64,6 @@ class InitCommand extends AbstractBaseCommand
         
         // Configure source based on type
         switch ($sourceType) {
-            // case 'file':
-            //     $apmConfig['source_path'] = $io->prompt('Enter the path to read the metrics log file:', '/tmp/apm_metrics.json');
-            //     if(!file_exists($apmConfig['source_path'])) {
-            //         $io->error('The specified file does not exist. Please check the path and try again.', true);
-            //         return;
-            //     }
-            //     break;
                 
             case 'sqlite':
                 $apmConfig['source_db_dsn'] = $io->prompt('Enter the SQLite DSN for the apm_metrics_log table:', 'sqlite:/tmp/apm_metrics.sqlite');
@@ -102,13 +80,6 @@ class InitCommand extends AbstractBaseCommand
                 $apmConfig['source_db_options'] = json_decode($optionsJson, true) ?? [];
                 break;
                 
-            // case 'timescaledb':
-            //     $apmConfig['source_db_dsn'] = $io->prompt('Enter the source TimescaleDB DSN for the database that has the apm_metrics_log table:', 'pgsql:host=localhost;dbname=apm');
-            //     $apmConfig['source_db_user'] = $io->prompt('Enter the source TimescaleDB username for the database that has the apm_metrics_log table:', 'postgres');
-            //     $apmConfig['source_db_pass'] = $io->prompt('Enter the source TimescaleDB password for the database that has the apm_metrics_log table:', '');
-            //     $optionsJson = $io->prompt('Enter any PDO options for TimescaleDB as a JSON object (e.g. {"PDO::ATTR_ERRMODE":3}):', '{}');
-            //     $apmConfig['source_db_options'] = json_decode($optionsJson, true) ?? [];
-            //     break;
         }
         
         // DESTINATION CONFIGURATION
@@ -118,7 +89,6 @@ class InitCommand extends AbstractBaseCommand
         $storageTypes = [
             '1' => 'sqlite',
             '2' => 'mysql',
-            // '4' => 'timescaledb'
         ];
         
         $choice = $io->choice('What type of storage would you like to use for destination?', $storageTypes, '1');
@@ -127,13 +97,6 @@ class InitCommand extends AbstractBaseCommand
         
         // Configure storage based on type
         switch ($storageType) {
-            case 'file':
-                $apmConfig['storage_path'] = $io->prompt('Enter the path to store the metrics file:', '/tmp/apm_processed_metrics.json');
-                if(!is_writable(dirname($apmConfig['storage_path']))) {
-                    $io->error('The specified directory is not writable. Please check the path and try again.', true);
-                    return;
-                }
-                break;
                 
             case 'sqlite':
                 $apmConfig['dest_db_dsn'] = $io->prompt('Enter the SQLite DSN for where the APM data will be stored:', 'sqlite:/tmp/apm_metrics_processed.sqlite');
@@ -150,13 +113,6 @@ class InitCommand extends AbstractBaseCommand
                 $apmConfig['dest_db_options'] = json_decode($optionsJson, true) ?? [];
                 break;
                 
-            // case 'timescaledb':
-            //     $apmConfig['dest_db_dsn'] = $io->prompt('Enter the TimescaleDB DSN for where the APM data will be stored:', 'pgsql:host=localhost;dbname=apm_processed');
-            //     $apmConfig['dest_db_user'] = $io->prompt('Enter the TimescaleDB username for where the APM data will be stored:', 'postgres');
-            //     $apmConfig['dest_db_pass'] = $io->prompt('Enter the TimescaleDB password for where the APM data will be stored:', '');
-            //     $optionsJson = $io->prompt('Enter any PDO options for TimescaleDB as a JSON object (e.g. {"PDO::ATTR_ERRMODE":3}):', '{}');
-            //     $apmConfig['dest_db_options'] = json_decode($optionsJson, true) ?? [];
-            //     break;
         }
         
         // Save the configuration
@@ -170,10 +126,9 @@ class InitCommand extends AbstractBaseCommand
 
         $config['apm'] = $apmConfig;
 
-        $json = json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-        file_put_contents($configFile, $json);
-        
-        $io->boldGreen('APM configuration saved successfully! Configuration saved at '. $configFile, true);
+		$this->setRunwayConfig($config);
+
+        $io->boldGreen('APM configuration saved successfully!', true);
 
 		$answer = $io->prompt('Do you want to run the migration now? (y/n)', 'y',);
 
@@ -183,7 +138,7 @@ class InitCommand extends AbstractBaseCommand
 		}
 
 		$io->info('Running migration...', true);
-		$this->app()->handle([ 'vendor/bin/runway', 'apm:migrate', '--config-file', $configFile ]);
+		$this->app()->handle([ 'vendor/bin/runway', 'apm:migrate' ]);
 		$io->boldGreen('Migration completed successfully!', true);
     }
 }
