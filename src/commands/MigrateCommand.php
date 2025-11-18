@@ -117,9 +117,8 @@ class MigrateCommand extends AbstractBaseCommand
 		}
 
         // Update config with executed migrations
-        $config['apm']['executed_migrations'] = $newExecutedMigrations;
-        $json = json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-        file_put_contents($configFile, $json);
+        $runwayConfig['apm']['executed_migrations'] = $newExecutedMigrations;
+		$this->setRunwayConfig($runwayConfig);
 
         $io->boldGreen("Migration completed successfully!", true);
     }
