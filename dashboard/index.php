@@ -6,35 +6,36 @@
 use flight\apm\presenter\PresenterFactory;
 
 $paths = [
-	__DIR__.'/../vendor/autoload.php',
-	__DIR__.'/../autoload.php',
-	__DIR__.'/../../autoload.php',
-	__DIR__.'/../../../autoload.php',
+    __DIR__ . '/../vendor/autoload.php',
+    __DIR__ . '/../autoload.php',
+    __DIR__ . '/../../autoload.php',
+    __DIR__ . '/../../../autoload.php',
 ];
 $finalPath = '';
 foreach ($paths as $path) {
-	if (file_exists($path) === true) {
-		$finalPath = $path;
-		require $path;
-		break;
-	}
+    if (file_exists($path) === true) {
+        $finalPath = $path;
+        require $path;
+        break;
+    }
 }
 if (empty($finalPath)) {
-	throw new Exception('Could not find autoload.php');
+    throw new Exception('Could not find autoload.php');
 }
-
-$appRootPath = dirname($finalPath).'/../';
+$appRootPath = dirname($finalPath) . '/../';
 
 $app = Flight::app();
-$app->set('flight.views.path', __DIR__.'/views');
 
-if(file_exists($appRootPath.'/app/config/config.php') === true) {
-	$config = require($appRootPath.'/app/config/config.php');
-	$runwayConfig = $config['runway'] ?? [];
-} 
+if (file_exists($appRootPath . '/app/config/config.php') === true) {
+    $config = require($appRootPath . '/app/config/config.php');
+    $runwayConfig = $config['runway'] ?? [];
+}
 
-if(empty($runwayConfig) && file_exists($appRootPath.'/.runway-config.json') === true) {
-	$runwayConfig = json_decode(file_get_contents($appRootPath.'/.runway-config.json'), true);
+// This needs to come after the config is loaded so it's forced
+$app->set('flight.views.path', __DIR__ . '/views');
+
+if (empty($runwayConfig) && file_exists($appRootPath . '/.runway-config.json') === true) {
+    $runwayConfig = json_decode(file_get_contents($appRootPath . '/.runway-config.json'), true);
 }
 $presenter = PresenterFactory::create($runwayConfig);
 
@@ -47,31 +48,31 @@ function calculateThreshold($range) {
     return gmdate('Y-m-d H:i:s', strtotime($map[$range] ?? '-1 hour'));
 }
 
-$app->route('GET /apm/dashboard', function() use ($app) {
+$app->route('GET /apm/dashboard', function () use ($app) {
     $app->render('dashboard');
 });
 
 // Modified to only return widget data (no requests or pagination)
-$app->route('GET /apm/data/dashboard', function() use ($app, $presenter) {
+$app->route('GET /apm/data/dashboard', function () use ($app, $presenter) {
     $range = Flight::request()->query['range'] ?? 'last_hour';
     $threshold = calculateThreshold($range);
-	$data = $presenter->getDashboardData($threshold);
+    $data = $presenter->getDashboardData($threshold);
     $app->json($data);
 });
 
 // New endpoint specifically for request log data with enhanced custom events search
-$app->route('GET /apm/data/requests', function() use ($app, $presenter) {
+$app->route('GET /apm/data/requests', function () use ($app, $presenter) {
     $range = Flight::request()->query['range'] ?? 'last_hour';
-	$threshold = calculateThreshold($range);
+    $threshold = calculateThreshold($range);
     $page = max(1, (int) (Flight::request()->query['page'] ?? 1));
     $perPage = 50;
     $search = Flight::request()->query['search'] ?? '';
-	$data = $presenter->getRequestsData($threshold, $page, $perPage, $search);
-	$app->json($data);
+    $data = $presenter->getRequestsData($threshold, $page, $perPage, $search);
+    $app->json($data);
 });
 
 // New endpoint to retrieve available event keys for filtering
-$app->route('GET /apm/data/event-keys', function() use ($app, $presenter) {
+$app->route('GET /apm/data/event-keys', function () use ($app, $presenter) {
     $range = Flight::request()->query['range'] ?? 'last_hour';
     $threshold = calculateThreshold($range);
     $eventKeys = $presenter->getEventKeys($threshold);

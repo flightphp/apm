@@ -6,8 +6,6 @@ namespace flight\commands;
 
 use flight\commands\AbstractBaseCommand;
 use Ahc\Cli\IO\Interactor;
-use PDO;
-use PDOException;
 
 class ConfigMigrateCommand extends AbstractBaseCommand
 {
@@ -45,7 +43,7 @@ class ConfigMigrateCommand extends AbstractBaseCommand
 
 		$runwayConfig = json_decode(file_get_contents($configFile), true) ?? [];
 
-		$config = $this->config['runway'] ?? [];
+		$config['runway'] = $this->config['runway'] ?? [];
 
 		// Merge them together, with .runway-config.json taking precedence
 		$config['runway'] = array_merge($config['runway'], $runwayConfig);

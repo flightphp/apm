@@ -9,32 +9,28 @@ use Ahc\Cli\IO\Interactor;
 use PDO;
 use PDOException;
 
-class MigrateCommand extends AbstractBaseCommand
-{
-    /**
-     * Construct
-     *
-     * @param array<string,mixed> $config JSON config from .runway-config.json
-     */
-    public function __construct(array $config)
-    {
-        parent::__construct('apm:migrate', 'Run database migrations for APM', $config);
-        
-        // Add option for config file path
-        $this->option('-c --config-file path', 'Path to the runway config file (deprecated, use config.php instead)', null, getcwd() . '/.runway-config.json');
-    }
+class MigrateCommand extends AbstractBaseCommand {
+	/**
+	 * Construct
+	 *
+	 * @param array<string,mixed> $config JSON config from .runway-config.json
+	 */
+	public function __construct(array $config) {
+		parent::__construct('apm:migrate', 'Run database migrations for APM', $config);
 
-    public function interact(Interactor $io): void
-    {
-        // No interaction needed before execute
-    }
+		// Add option for config file path
+		$this->option('-c --config-file path', 'Path to the runway config file (deprecated, use config.php instead)', null, getcwd() . '/.runway-config.json');
+	}
 
-    public function execute()
-    {
-        $io = $this->app()->io();
+	public function interact(Interactor $io): void {
+		// No interaction needed before execute
+	}
 
-        $configFile = $this->configFile;
-		if($configFile) {
+	public function execute() {
+		$io = $this->app()->io();
+
+		if (empty($this->config['runway'])) {
+			$configFile = $this->configFile;
 			$io = $this->app()->io();
 			$io->warn('The --config-file option is deprecated. Move your config values to the \'runway\' key in the config.php file for configuration.', true);
 			$runwayConfig = json_decode(file_get_contents($configFile), true) ?? [];
@@ -42,13 +38,13 @@ class MigrateCommand extends AbstractBaseCommand
 			$runwayConfig = $this->config['runway'];
 		}
 
-        $apmConfig = $runwayConfig['apm'];
-        $storageType = $apmConfig['storage_type'] ?? null;
+		$apmConfig = $runwayConfig['apm'];
+		$storageType = $apmConfig['storage_type'] ?? null;
 
-        if (empty($storageType)) {
-            $io->error('Storage type not configured. Please run apm:init first.', true);
-            return;
-        }
+		if (empty($storageType)) {
+			$io->error('Storage type not configured. Please run apm:init first.', true);
+			return;
+		}
 
 		// Set up migrations directory
 		$migrationsDirBase = __DIR__ . '/../apm/migration/' . $storageType;
@@ -61,13 +57,13 @@ class MigrateCommand extends AbstractBaseCommand
 		$executedMigrations = $apmConfig['executed_migrations'] ?? [];
 		$newExecutedMigrations = $executedMigrations;
 
-		$sourceTypes = [ 'source', 'dest' ];
-		foreach($sourceTypes as $sourceType) {
+		$sourceTypes = ['source', 'dest'];
+		foreach ($sourceTypes as $sourceType) {
 			$migrationsDir = $migrationsDirBase . '/' . $sourceType;
 
 			// Get all migration files for source
 			$migrationFiles = $this->getMigrationFiles($migrationsDir);
-        
+
 			if (empty($migrationFiles)) {
 				$io->info("No migration files found in {$migrationsDir}", true);
 				return;
@@ -81,12 +77,12 @@ class MigrateCommand extends AbstractBaseCommand
 				return;
 			}
 
-        	$io->boldCyan("Running migrations for {$storageType} storage ({$sourceType})", true);
+			$io->boldCyan("Running migrations for {$storageType} storage ({$sourceType})", true);
 
 			// Run each migration that hasn't been executed yet
 			foreach ($migrationFiles as $migrationFile) {
 				$filename = basename($migrationFile);
-				
+
 				if (in_array($filename, $executedMigrations) === true) {
 					$io->comment("Skipping {$filename} (already executed)", true);
 					$newExecutedMigrations[] = $filename;
@@ -94,7 +90,7 @@ class MigrateCommand extends AbstractBaseCommand
 				}
 
 				$io->info("Running migration: {$filename}", true);
-				
+
 				try {
 					// Get SQL from migration file
 					$sql = file_get_contents($migrationFile);
@@ -105,7 +101,7 @@ class MigrateCommand extends AbstractBaseCommand
 
 					// Execute the SQL
 					$db->exec($sql);
-					
+
 					// Add to executed migrations
 					$newExecutedMigrations[] = $filename;
 					$io->boldGreen("Successfully executed {$filename}", true);
@@ -116,58 +112,56 @@ class MigrateCommand extends AbstractBaseCommand
 			}
 		}
 
-        // Update config with executed migrations
-        $runwayConfig['apm']['executed_migrations'] = $newExecutedMigrations;
+		// Update config with executed migrations
+		$runwayConfig['apm']['executed_migrations'] = $newExecutedMigrations;
 		$this->setRunwayConfig($runwayConfig);
 
-        $io->boldGreen("Migration completed successfully!", true);
-    }
+		$io->boldGreen("Migration completed successfully!", true);
+	}
 
-    /**
-     * Get all migration files in the migrations directory
-     * 
-     * @param string $migrationsDir
-     * @return array<string>
-     */
-    protected function getMigrationFiles(string $migrationsDir): array
-    {
-        $files = glob($migrationsDir . '/*.sql');
-        return $files !== false ? $files : [];
-    }
+	/**
+	 * Get all migration files in the migrations directory
+	 * 
+	 * @param string $migrationsDir
+	 * @return array<string>
+	 */
+	protected function getMigrationFiles(string $migrationsDir): array {
+		$files = glob($migrationsDir . '/*.sql');
+		return $files !== false ? $files : [];
+	}
 
-    /**
-     * Get database connection based on storage type
-     * 
-     * @param array<string,mixed> $config
+	/**
+	 * Get database connection based on storage type
+	 * 
+	 * @param array<string,mixed> $config
 	 * @param string $sourceType 'source' or 'dest'
 	 * 
-     * @return PDO
-     */
-    protected function getDatabaseConnection(array $config, string $sourceType): PDO
-    {
-        $storageType = $config['storage_type'];
-        
-        switch ($storageType) {
-            case 'sqlite':
-                $dsn = $config[$sourceType.'_db_dsn'];
-                return new PDO($dsn, null, null, [
+	 * @return PDO
+	 */
+	protected function getDatabaseConnection(array $config, string $sourceType): PDO {
+		$storageType = $config['storage_type'];
+
+		switch ($storageType) {
+			case 'sqlite':
+				$dsn = $config[$sourceType . '_db_dsn'];
+				return new PDO($dsn, null, null, [
 					PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
 					PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
 					PDO::ATTR_EMULATE_PREPARES => false,
 				]);
 
 			case 'mysql':
-				$dsn = $config[$sourceType.'_db_dsn'];
-				$user = $config[$sourceType.'_db_user'] ?? null;
-				$password = $config[$sourceType.'_db_pass'] ?? null;
+				$dsn = $config[$sourceType . '_db_dsn'];
+				$user = $config[$sourceType . '_db_user'] ?? null;
+				$password = $config[$sourceType . '_db_pass'] ?? null;
 				return new PDO($dsn, $user, $password, [
 					PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
 					PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
 					PDO::ATTR_EMULATE_PREPARES => false,
 				]);
 
-            default:
-                throw new \InvalidArgumentException("Unsupported storage type: {$storageType}");
-        }
-    }
+			default:
+				throw new \InvalidArgumentException("Unsupported storage type: {$storageType}");
+		}
+	}
 }
