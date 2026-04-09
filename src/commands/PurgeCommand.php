@@ -80,6 +80,55 @@ class PurgeCommand extends AbstractBaseCommand {
 
             $io->boldGreen("Successfully purged {$rowCount} old records from apm_requests table", true);
 
+            // Clean up any orphaned child records in case foreign keys were disabled in the past
+            $childTables = [
+                'apm_routes',
+                'apm_middleware',
+                'apm_views',
+                'apm_db_connections',
+                'apm_db_queries',
+                'apm_errors',
+                'apm_cache',
+                'apm_custom_events',
+                'apm_custom_event_data',
+                'apm_raw_metrics'
+            ];
+
+            $orphanedCount = 0;
+            foreach ($childTables as $table) {
+                try {
+                    $io->info("Scanning {$table} for orphaned records...", true);
+                    $orphansDeleted = $db->exec("DELETE FROM {$table} WHERE NOT EXISTS (SELECT 1 FROM apm_requests WHERE id = {$table}.request_id)");
+                    if ($orphansDeleted > 0) {
+                        $orphanedCount += (int)$orphansDeleted;
+                        $io->boldGreen("Purged {$orphansDeleted} orphaned records from {$table}", true);
+                    }
+                } catch (PDOException $e) {
+                    // Table might not exist in an older schema version, continue
+                }
+            }
+            
+            if ($orphanedCount > 0) {
+                $io->boldGreen("Successfully cleaned up a total of {$orphanedCount} orphaned child records", true);
+            }
+
+            // Clean up JSON buffer tables if they exist using JSON extraction
+            try {
+                $cutoffUnix = strtotime("-{$daysToKeep} days");
+                $jsonExtractFunc = $storageType === 'mysql' ? 'JSON_EXTRACT' : 'json_extract';
+                
+                $stmt = $db->prepare("DELETE FROM apm_metrics_log WHERE {$jsonExtractFunc}(metrics_json, '$.start_time') < :cutoff_unix");
+                $stmt->bindParam(':cutoff_unix', $cutoffUnix);
+                if ($stmt->execute()) {
+                    $logCount = $stmt->rowCount();
+                    if ($logCount > 0) {
+                        $io->info("Purged {$logCount} old records from apm_metrics_log table by JSON timestamp", true);
+                    }
+                }
+            } catch (PDOException $e) {
+                // Table might not exist, continue smoothly
+            }
+
             // If SQLite, vacuum the database to reclaim space
             if ($storageType === 'sqlite') {
                 $db->exec('VACUUM');
@@ -105,11 +154,14 @@ class PurgeCommand extends AbstractBaseCommand {
         switch ($storageType) {
             case 'sqlite':
                 $dsn = $config['dest_db_dsn'];
-                return new PDO($dsn, null, null, [
+                $pdo = new PDO($dsn, null, null, [
                     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                     PDO::ATTR_EMULATE_PREPARES => false,
                 ]);
+                // Enable foreign keys explicitly so CASCADE works correctly
+                $pdo->exec('PRAGMA foreign_keys = ON;');
+                return $pdo;
 
             case 'mysql':
                 $dsn = $config['dest_db_dsn'];
