@@ -230,7 +230,27 @@ class Apm
 			'Sogou',
 			'Exabot',
 			'facebot',
-			'ia_archiver'
+			'ia_archiver',
+			'AhrefsBot',
+			'Amazonbot',
+			'Anthropic-AI',
+			'Applebot',
+			'Bytespider',
+			'CCBot',
+			'ChatGPT-User',
+			'Claude-SearchBot',
+			'Claude-User',
+			'ClaudeBot',
+			'DotBot',
+			'FacebookBot',
+			'facebookexternalhit',
+			'GPTBot',
+			'meta-externalagent',
+			'MJ12bot',
+			'OAI-SearchBot',
+			'PerplexityBot',
+			'PetalBot',
+			'SemrushBot'
 		];
 
 		foreach ($botUserAgents as $bot) {
