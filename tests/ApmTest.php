@@ -2,26 +2,61 @@
 
 declare(strict_types=1);
 
+namespace Tests;
+
 use flight\Apm;
 use flight\apm\logger\LoggerInterface;
 use PHPUnit\Framework\TestCase;
 
 class ApmTest extends TestCase
 {
-    private Apm $apm;
-
-    protected function setUp(): void
+    public function testGenerateRequestTokenIsStableForTheRequest(): void
     {
-        $logger = new class implements LoggerInterface {
+        $apm = new Apm(new class implements LoggerInterface {
             public function log(array $metrics): void
             {
             }
-        };
-        $this->apm = new Apm($logger);
+        });
+        $token = $apm->generateRequestToken();
+
+        $this->assertNotSame('', $token);
+        $this->assertStringStartsWith('req_', $token);
+        $this->assertSame($token, $apm->generateRequestToken());
+        $this->assertSame($token, $apm->getRequestId());
+    }
+
+    public function testIsBotMatchesSearchAndLlmAgents(): void
+    {
+        $apm = new Apm(new class implements LoggerInterface {
+            public function log(array $metrics): void
+            {
+            }
+        });
+
+        $gptBot = 'Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)';
+        $this->assertTrue($apm->isBot($gptBot));
+        $this->assertTrue($apm->isBot('Mozilla/5.0 (compatible; ClaudeBot/1.0)'));
+        $agents = 'Mozilla/5.0 (compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)';
+        $this->assertTrue($apm->isBot($agents));
+        $this->assertTrue($apm->isBot('SearxNG/1.0'));
+        $this->assertTrue($apm->isBot('Mozilla/5.0 (compatible; Googlebot/2.1)'));
+        $this->assertTrue($apm->isBot('Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)'));
+        $claude = 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-SearchBot/1.0)';
+        $this->assertTrue($apm->isBot($claude));
+        $this->assertTrue($apm->isBot('Anthropic-AI'));
+        $this->assertTrue($apm->isBot('facebookexternalhit/1.1'));
+        $browser = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36';
+        $this->assertFalse($apm->isBot($browser));
+        $this->assertFalse($apm->isBot(''));
     }
 
     public function testExistingBotNamesStillMatch(): void
     {
+        $apm = new Apm(new class implements LoggerInterface {
+            public function log(array $metrics): void
+            {
+            }
+        });
         $names = [
             'Googlebot',
             'Bingbot',
@@ -34,35 +69,8 @@ class ApmTest extends TestCase
             'facebot',
             'ia_archiver',
         ];
-
         foreach ($names as $name) {
-            $this->assertTrue(
-                $this->apm->isBot($name),
-                $name . ' should still be detected as a bot'
-            );
+            $this->assertTrue($apm->isBot($name), $name . ' should still be detected as a bot');
         }
-    }
-
-    public function testAhrefsBotMatches(): void
-    {
-        $userAgent = 'Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)';
-        $this->assertTrue($this->apm->isBot($userAgent));
-    }
-
-    public function testClaudeSearchBotMatches(): void
-    {
-        $userAgent = 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-SearchBot/1.0; +searchbot@anthropic.com)';
-        $this->assertTrue($this->apm->isBot($userAgent));
-    }
-
-    public function testNormalBrowserUserAgentIsNotABot(): void
-    {
-        $userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-        $this->assertFalse($this->apm->isBot($userAgent));
-    }
-
-    public function testEmptyStringIsNotABot(): void
-    {
-        $this->assertFalse($this->apm->isBot(''));
     }
 }

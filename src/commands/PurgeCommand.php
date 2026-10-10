@@ -65,8 +65,8 @@ class PurgeCommand extends AbstractBaseCommand {
             return;
         }
 
-        // Calculate the date threshold
-        $cutoffDate = date('Y-m-d H:i:s', strtotime("-{$daysToKeep} days"));
+        // request_dt is stored in UTC. Compare it to a UTC cutoff.
+        $cutoffDate = $this->cutoffDate($daysToKeep);
 
         $io->boldCyan("Purging APM data older than {$daysToKeep} days ({$cutoffDate})", true);
 
@@ -140,6 +140,17 @@ class PurgeCommand extends AbstractBaseCommand {
         }
 
         $io->boldGreen("Data purge completed successfully!", true);
+    }
+
+    /**
+     * UTC timestamp for the oldest row that should be kept.
+     *
+     * @param int $daysToKeep
+     * @return string
+     */
+    protected function cutoffDate(int $daysToKeep): string
+    {
+        return gmdate('Y-m-d H:i:s', strtotime("-{$daysToKeep} days"));
     }
 
     /**

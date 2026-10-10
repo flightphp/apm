@@ -1,222 +1,586 @@
-// Initialize variables
 const rangeSelector = document.getElementById('range');
 const timezoneSelector = document.getElementById('timezone');
 const themeToggle = document.getElementById('theme-toggle');
+const excludeBots = document.getElementById('exclude-bots');
+const customRange = document.getElementById('custom-range');
+const rangeFrom = document.getElementById('range-from');
+const rangeUntil = document.getElementById('range-until');
+
 let isDarkMode = localStorage.getItem('darkMode') === 'true';
+let selectedTimezone = 'UTC';
 let currentPage = 1;
 let totalPages = 1;
-let perPage = 50;
-let activeFilters = {}; // New object to store all active filters
-let dashboardData = null;
-let latencyChart, responseCodeChart;
-let filterDebounceTimer = null;
-const DEBOUNCE_DELAY = 300; // milliseconds
-let selectedTimezone = localStorage.getItem('selectedTimezone') || 'UTC';
+let activeFilters = {};
+let lastDashboard = null;
+let latencyChart;
+let responseCodeChart;
+let availableEventKeys = [];
 
-// Apply stored theme or default to light
 if (isDarkMode) {
     document.documentElement.setAttribute('data-theme', 'dark');
-    themeToggle.innerHTML = '<i class="bi bi-sun"></i> Light Mode';
+    themeToggle.innerHTML = '<i class="bi bi-sun"></i> Light mode';
 }
 
-// Set the timezone dropdown to the stored value
-if (selectedTimezone) {
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+}
+
+function pad(number) {
+    return String(number).padStart(2, '0');
+}
+
+function parseUtc(utcTimestamp) {
+    if (!utcTimestamp) {
+        return null;
+    }
+    const text = String(utcTimestamp);
+    if (text.includes('T')) {
+        return new Date(text);
+    }
+    const parts = text.split(/[- :]/);
+    if (parts.length >= 6) {
+        return new Date(Date.UTC(
+            parseInt(parts[0], 10),
+            parseInt(parts[1], 10) - 1,
+            parseInt(parts[2], 10),
+            parseInt(parts[3], 10),
+            parseInt(parts[4], 10),
+            parseInt(parts[5], 10)
+        ));
+    }
+    return new Date(text + 'Z');
+}
+
+function formatTimestamp(utcTimestamp, withSeconds = true) {
+    const date = parseUtc(utcTimestamp);
+    if (!date || Number.isNaN(date.getTime())) {
+        return String(utcTimestamp ?? '');
+    }
+    const options = {
+        timeZone: selectedTimezone,
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    };
+    if (withSeconds) {
+        options.second = '2-digit';
+    }
+    return date.toLocaleString(navigator.language || 'en-US', options);
+}
+
+function utcStamp(date) {
+    return date.getUTCFullYear() + '-' + pad(date.getUTCMonth() + 1) + '-' + pad(date.getUTCDate())
+        + ' ' + pad(date.getUTCHours()) + ':' + pad(date.getUTCMinutes()) + ':' + pad(date.getUTCSeconds());
+}
+
+function localInputToUtc(value) {
+    if (!value) {
+        return '';
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return '';
+    }
+    return utcStamp(date);
+}
+
+function utcToLocalInput(value) {
+    const date = parseUtc(value);
+    if (!date || Number.isNaN(date.getTime())) {
+        return '';
+    }
+    return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
+        + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+}
+
+function formatBytes(bytes) {
+    const size = Number(bytes) || 0;
+    if (size < 1024) {
+        return size + ' B';
+    }
+    if (size < 1048576) {
+        return (size / 1024).toFixed(1) + ' KB';
+    }
+    return (size / 1048576).toFixed(1) + ' MB';
+}
+
+function formatMs(seconds) {
+    const ms = (Number(seconds) || 0) * 1000;
+    return ms.toFixed(ms >= 100 ? 0 : 1) + ' ms';
+}
+
+function latencyClass(ms) {
+    if (ms >= 1000) {
+        return 'text-danger';
+    }
+    if (ms >= 300) {
+        return 'text-warning';
+    }
+    return '';
+}
+
+function statusBadge(code) {
+    const status = Number(code);
+    let cls = 'bg-secondary';
+    if (status >= 500) {
+        cls = 'bg-danger';
+    } else if (status >= 400) {
+        cls = 'bg-warning text-dark';
+    } else if (status >= 300) {
+        cls = 'bg-info text-dark';
+    } else if (status >= 200) {
+        cls = 'bg-success';
+    }
+    return '<span class="badge ' + cls + '">' + escapeHtml(code) + '</span>';
+}
+
+function chartTheme() {
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    return {
+        text: dark ? '#e0e0e0' : '#333333',
+        grid: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'
+    };
+}
+
+function showError(message) {
+    const box = document.getElementById('load-error');
+    box.textContent = message;
+    box.classList.remove('d-none');
+}
+
+function hideError() {
+    document.getElementById('load-error').classList.add('d-none');
+}
+
+function readUrl() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('range')) {
+        rangeSelector.value = params.get('range');
+    }
+    selectedTimezone = params.get('tz') || localStorage.getItem('selectedTimezone') || 'UTC';
     timezoneSelector.value = selectedTimezone;
+    excludeBots.checked = params.get('exclude_bots') === '1';
+    currentPage = Math.max(1, parseInt(params.get('page') || '1', 10));
+    if (params.get('from')) {
+        rangeFrom.value = utcToLocalInput(params.get('from').replace('+', ' '));
+    }
+    if (params.get('until')) {
+        rangeUntil.value = utcToLocalInput(params.get('until').replace('+', ' '));
+    }
+    const fields = {
+        url: 'filter-url',
+        request_id: 'filter-request-id',
+        is_bot: 'filter-bot',
+        min_time: 'filter-min-time',
+        route: 'filter-route',
+        ip: 'filter-ip',
+        host: 'filter-host',
+        session_id: 'filter-session-id',
+        user_agent: 'filter-user-agent',
+        custom_event_type: 'filter-custom-event',
+        error_message: 'filter-error'
+    };
+    Object.entries(fields).forEach(([key, id]) => {
+        const node = document.getElementById(id);
+        if (node && params.get(key) !== null) {
+            node.value = params.get(key);
+        }
+    });
+    const code = document.getElementById('filter-response-code');
+    if (params.get('response_code')) {
+        code.value = 'exact';
+        document.getElementById('filter-exact-code').value = params.get('response_code');
+        document.getElementById('exact-code-container').classList.remove('d-none');
+    } else if (params.get('response_code_prefix')) {
+        code.value = params.get('response_code_prefix');
+    }
+    if (params.get('event_keys')) {
+        try {
+            activeFilters.event_keys = JSON.parse(params.get('event_keys'));
+        } catch (error) {
+            activeFilters.event_keys = [];
+        }
+    }
+    captureFilters(false);
+    toggleCustomRange();
 }
 
-// Toggle theme
-themeToggle.addEventListener('click', () => {
-    isDarkMode = !isDarkMode;
-    document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : '');
-    themeToggle.innerHTML = `<i class="bi bi-${isDarkMode ? 'sun' : 'moon-stars'}"></i> ${isDarkMode ? 'Light' : 'Dark'} Mode`;
-    localStorage.setItem('darkMode', isDarkMode);
-});
-
-// Function to format a UTC timestamp to the selected timezone
-function formatTimestamp(utcTimestamp) {
-    try {
-        let date;
-        
-        // Check if timestamp is in ISO format or contains 'Z' (indicating UTC)
-        if (utcTimestamp.includes('T') && (utcTimestamp.includes('Z') || utcTimestamp.includes('+'))) {
-            // Already in ISO format with timezone info, just parse it
-            date = new Date(utcTimestamp);
-        } else {
-            // Assume format: YYYY-MM-DD HH:MM:SS and explicitly treat as UTC
-            // MySQL timestamp format from database
-            const parts = utcTimestamp.split(/[- :]/);
-            if (parts.length >= 6) {
-                date = new Date(Date.UTC(
-                    parseInt(parts[0]),
-                    parseInt(parts[1])-1,
-                    parseInt(parts[2]),
-                    parseInt(parts[3]),
-                    parseInt(parts[4]),
-                    parseInt(parts[5])
-                ));
-            } else {
-                // If no specific format is detected, append 'Z' to signal UTC
-                date = new Date(utcTimestamp + 'Z');
+function captureFilters(fromForm = true) {
+    if (!fromForm) {
+        ['url', 'request_id', 'is_bot', 'min_time', 'route', 'ip', 'host', 'session_id', 'user_agent', 'custom_event_type', 'error_message'].forEach((key) => {
+            const map = {
+                url: 'filter-url',
+                request_id: 'filter-request-id',
+                is_bot: 'filter-bot',
+                min_time: 'filter-min-time',
+                route: 'filter-route',
+                ip: 'filter-ip',
+                host: 'filter-host',
+                session_id: 'filter-session-id',
+                user_agent: 'filter-user-agent',
+                custom_event_type: 'filter-custom-event',
+                error_message: 'filter-error'
+            };
+            const value = document.getElementById(map[key]).value.trim();
+            if (value !== '') {
+                activeFilters[key] = value;
             }
-        }
-        
-        // Check if date parsing succeeded
-        if (isNaN(date.getTime())) {
-            throw new Error("Invalid timestamp format");
-        }
-
-		// get the locale from the browser
-		const locale = navigator.language || 'en-US';
-        
-        // Format the date in the selected timezone
-        return date.toLocaleString(locale, { 
-            timeZone: selectedTimezone,
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
         });
+    }
+    const next = {};
+    const take = (key, id) => {
+        const value = document.getElementById(id).value.trim();
+        if (value !== '') {
+            next[key] = value;
+        }
+    };
+    take('url', 'filter-url');
+    take('request_id', 'filter-request-id');
+    take('is_bot', 'filter-bot');
+    take('min_time', 'filter-min-time');
+    take('route', 'filter-route');
+    take('ip', 'filter-ip');
+    take('host', 'filter-host');
+    take('session_id', 'filter-session-id');
+    take('user_agent', 'filter-user-agent');
+    take('custom_event_type', 'filter-custom-event');
+    take('error_message', 'filter-error');
+    const code = document.getElementById('filter-response-code').value;
+    const exact = document.getElementById('filter-exact-code').value.trim();
+    if (code === 'exact' && exact !== '') {
+        next.response_code = exact;
+    } else if (code && code !== 'exact') {
+        next.response_code_prefix = code;
+    }
+    const eventKeys = [];
+    document.querySelectorAll('.event-filter-row').forEach((row) => {
+        const key = row.querySelector('.event-key-select').value;
+        const operator = row.querySelector('.event-operator-select').value;
+        const value = row.querySelector('.event-value-input').value.trim();
+        if (key !== '' || value !== '') {
+            eventKeys.push({ key, operator, value });
+        }
+    });
+    if (eventKeys.length) {
+        next.event_keys = eventKeys;
+    } else if (!fromForm && Array.isArray(activeFilters.event_keys)) {
+        next.event_keys = activeFilters.event_keys;
+    }
+    activeFilters = next;
+}
+
+function queryParams() {
+    const params = new URLSearchParams();
+    params.set('range', rangeSelector.value);
+    params.set('tz', selectedTimezone);
+    if (excludeBots.checked) {
+        params.set('exclude_bots', '1');
+    }
+    if (rangeSelector.value === 'custom') {
+        const from = localInputToUtc(rangeFrom.value);
+        const until = localInputToUtc(rangeUntil.value);
+        if (from) {
+            params.set('from', from);
+        }
+        if (until) {
+            params.set('until', until);
+        }
+    }
+    if (currentPage > 1) {
+        params.set('page', String(currentPage));
+    }
+    Object.entries(activeFilters).forEach(([key, value]) => {
+        if (value === '' || value === null) {
+            return;
+        }
+        params.set(key, key === 'event_keys' ? JSON.stringify(value) : value);
+    });
+    return params;
+}
+
+function syncUrl() {
+    const params = queryParams();
+    const next = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+    window.history.replaceState(null, '', next);
+}
+
+function toggleCustomRange() {
+    customRange.classList.toggle('d-none', rangeSelector.value !== 'custom');
+}
+
+async function loadData() {
+    hideError();
+    syncUrl();
+    const params = queryParams();
+    params.set('details', '0');
+    try {
+        const [dashboardResponse, requestResponse] = await Promise.all([
+            fetch('/apm/data/dashboard?' + queryParams().toString()),
+            fetch('/apm/data/requests?' + params.toString())
+        ]);
+        if (!dashboardResponse.ok || !requestResponse.ok) {
+            throw new Error('The dashboard data request failed.');
+        }
+        lastDashboard = await dashboardResponse.json();
+        const requests = await requestResponse.json();
+        populateDashboard(lastDashboard);
+        drawCharts(lastDashboard);
+        populateRequestLog(requests.requests || []);
+        updatePagination(requests.pagination || {});
+        renderActiveFilters();
     } catch (error) {
-        console.error("Error formatting timestamp:", error, utcTimestamp);
-        return utcTimestamp; // Return original if there's an error
+        showError(error.message || 'Could not load the dashboard.');
     }
 }
 
-// Main data loading functions
-function loadData() {
-    loadDashboardData();
-    loadRequestLogData();
+function setStat(id, text, className) {
+    const node = document.getElementById(id);
+    node.textContent = text;
+    node.className = 'stat-value ' + (className || '');
 }
 
-// Function to load dashboard widget data
-function loadDashboardData() {
-    const range = rangeSelector.value;
-    fetch(`/apm/data/dashboard?range=${range}`)
-        .then(response => {
-            if (!response.ok) throw new Error('Network response was not ok');
-            return response.json();
-        })
-        .then(data => {
-            console.log('Dashboard data received:', data);
-            dashboardData = data;
-            populateWidgets(data);
-            drawLatencyChart(data); // Changed from drawCharts to only draw the latency chart
-        })
-        .catch(error => console.error('Error loading dashboard data:', error));
+function populateDashboard(data) {
+    const count = Number(data.allRequestsCount) || 0;
+    setStat('all-requests-count', String(count));
+    const errorPct = (Number(data.errorRate) || 0) * 100;
+    setStat('error-rate', errorPct.toFixed(2) + '%', errorPct >= 5 ? 'text-danger' : (errorPct >= 1 ? 'text-warning' : ''));
+    const p95 = (Number(data.p95) || 0) * 1000;
+    const p99 = (Number(data.p99) || 0) * 1000;
+    const avg = (Number(data.averageLatency) || 0) * 1000;
+    setStat('p95', p95.toFixed(0) + ' ms', latencyClass(p95));
+    setStat('p99', p99.toFixed(0) + ' ms', latencyClass(p99));
+    setStat('avg-latency', avg.toFixed(0) + ' ms', latencyClass(avg));
+    setStat('throughput', (Number(data.throughputPerMinute) || 0).toFixed(1));
+    document.getElementById('cache-hit-rate').textContent = ((Number(data.cacheHitRate) || 0) * 100).toFixed(1) + '%';
+    const backlogWrap = document.getElementById('backlog-wrap');
+    if (data.workerBacklog === null || data.workerBacklog === undefined) {
+        backlogWrap.classList.add('d-none');
+    } else {
+        backlogWrap.classList.remove('d-none');
+        document.getElementById('worker-backlog').textContent = String(data.workerBacklog);
+    }
+    document.getElementById('empty-window').classList.toggle('d-none', count !== 0);
+    renderList('slow-routes', data.slowRoutes, (row) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+        button.innerHTML = '<span>' + escapeHtml(row.route_pattern) + '</span><span class="badge bg-info">'
+            + escapeHtml(formatMs(row.avg_time)) + ' · ' + escapeHtml(row.hit_count) + '</span>';
+        button.addEventListener('click', () => {
+            document.getElementById('filter-route').value = row.route_pattern;
+            currentPage = 1;
+            captureFilters();
+            loadData();
+        });
+        return button;
+    }, 'No route samples.');
+    renderList('slow-middleware', data.slowMiddleware, (row) => itemHtml(
+        row.middleware_name,
+        formatMs(row.execution_time) + ' · ' + row.hit_count
+    ), 'No middleware samples.');
+    renderList('long-queries', data.longQueries, (row) => {
+        const item = document.createElement('li');
+        item.className = 'list-group-item';
+        item.title = row.query || '';
+        item.innerHTML = '<div class="d-flex justify-content-between gap-2"><span>'
+            + escapeHtml(row.normalized || row.query) + '</span><span class="badge bg-warning text-dark">'
+            + escapeHtml(formatMs(row.avg_time || row.execution_time)) + ' · ' + escapeHtml(row.hit_count || 1)
+            + '</span></div>';
+        return item;
+    }, 'No query samples.');
+    renderList('slow-requests', data.slowRequests, (row) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+        button.innerHTML = '<span>' + escapeHtml(row.request_method || '') + ' ' + escapeHtml(row.request_url)
+            + '</span><span class="badge bg-primary">' + escapeHtml(formatMs(row.total_time)) + '</span>';
+        button.addEventListener('click', () => {
+            document.getElementById('filter-request-id').value = row.request_token || '';
+            currentPage = 1;
+            captureFilters();
+            loadData();
+        });
+        return button;
+    }, 'No requests.');
+    const errors = data.errorGroups || [];
+    renderList('error-groups', errors, (row) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+        button.innerHTML = '<span>' + escapeHtml(row.error_message) + '</span><span class="badge bg-danger">'
+            + escapeHtml(row.hit_count) + '</span>';
+        button.addEventListener('click', () => {
+            document.getElementById('filter-error').value = row.error_message || '';
+            currentPage = 1;
+            captureFilters();
+            loadData();
+        });
+        return button;
+    }, 'No errors in this window.');
 }
 
-// Function to load only request log data
-function loadRequestLogData() {
-    const range = rangeSelector.value;
-    
-    // Build query params from all active filters
-    const queryParams = new URLSearchParams();
-    queryParams.append('range', range);
-    queryParams.append('page', currentPage);
-    
-    // Add each active filter to the query params
-    Object.entries(activeFilters).forEach(([key, value]) => {
-        if (value !== null && value !== '') {
-            // Special handling for event_keys which needs to be JSON
-            if (key === 'event_keys') {
-                queryParams.append(key, JSON.stringify(value));
-            } else {
-                queryParams.append(key, value);
+function itemHtml(label, badge) {
+    const item = document.createElement('li');
+    item.className = 'list-group-item d-flex justify-content-between align-items-center gap-2';
+    item.innerHTML = '<span>' + escapeHtml(label) + '</span><span class="badge bg-primary">' + escapeHtml(badge) + '</span>';
+    return item;
+}
+
+function renderList(id, rows, render, emptyText) {
+    const list = document.getElementById(id);
+    list.innerHTML = '';
+    if (!rows || rows.length === 0) {
+        const item = document.createElement('li');
+        item.className = 'list-group-item text-muted';
+        item.textContent = emptyText;
+        list.appendChild(item);
+        return;
+    }
+    rows.forEach((row) => list.appendChild(render(row)));
+}
+
+function drawCharts(data) {
+    const theme = chartTheme();
+    const scale = {
+        ticks: { color: theme.text, maxRotation: 0, autoSkip: true, maxTicksLimit: 6 },
+        grid: { color: theme.grid },
+        title: { color: theme.text }
+    };
+    const latency = data.chartData || [];
+    const ctxLatency = document.getElementById('latencyChart');
+    if (latencyChart) {
+        latencyChart.destroy();
+    }
+    latencyChart = new Chart(ctxLatency, {
+        data: {
+            labels: latency.map((row) => row.request_dt),
+            datasets: [
+                {
+                    type: 'line',
+                    label: 'Average latency (ms)',
+                    data: latency.map((row) => (Number(row.average_time) || 0) * 1000),
+                    borderColor: '#0d6efd',
+                    backgroundColor: 'rgba(13, 110, 253, 0.15)',
+                    yAxisID: 'y',
+                    tension: 0.2,
+                    pointRadius: 0,
+                    spanGaps: true
+                },
+                {
+                    type: 'bar',
+                    label: 'Requests',
+                    data: latency.map((row) => Number(row.request_count) || 0),
+                    backgroundColor: 'rgba(25, 135, 84, 0.35)',
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            maintainAspectRatio: false,
+            scales: {
+                x: Object.assign({}, scale, {
+                    ticks: Object.assign({}, scale.ticks, {
+                        callback(value) {
+                            return formatTimestamp(this.getLabelForValue(value), false);
+                        }
+                    })
+                }),
+                y: Object.assign({}, scale, { position: 'left', beginAtZero: true, title: { display: true, text: 'ms', color: theme.text } }),
+                y1: Object.assign({}, scale, { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, title: { display: true, text: 'Requests', color: theme.text } })
+            },
+            plugins: {
+                legend: { labels: { color: theme.text } },
+                tooltip: {
+                    callbacks: {
+                        title(items) {
+                            return formatTimestamp(items[0].label);
+                        }
+                    }
+                }
             }
         }
     });
-    
-    fetch(`/apm/data/requests?${queryParams.toString()}`)
-        .then(response => {
-            if (!response.ok) throw new Error('Network response was not ok');
-            return response.json();
-        })
-        .then(data => {
-            console.log('Request log data received:', data);
-            populateRequestLog(data.requests);
-            updatePagination(data.pagination);
-            
-            // Update the response code distribution chart with filtered data
-            if (data.responseCodeDistribution && data.responseCodeDistribution.length > 0) {
-                updateResponseCodeChart(data.responseCodeDistribution);
-            } else if (Object.keys(activeFilters).length > 0) {
-                // If we have active filters but no matching data, show empty chart
-                updateResponseCodeChart([]);
+
+    const status = data.statusClassesOverTime || [];
+    const ctxStatus = document.getElementById('responseCodeChart');
+    if (responseCodeChart) {
+        responseCodeChart.destroy();
+    }
+    const series = [
+        ['2xx', 'code_2xx', '#198754'],
+        ['3xx', 'code_3xx', '#0dcaf0'],
+        ['4xx', 'code_4xx', '#ffc107'],
+        ['5xx', 'code_5xx', '#dc3545']
+    ];
+    responseCodeChart = new Chart(ctxStatus, {
+        type: 'bar',
+        data: {
+            labels: status.map((row) => row.request_dt),
+            datasets: series.map(([label, key, color]) => ({
+                label,
+                data: status.map((row) => Number(row[key]) || 0),
+                backgroundColor: color
+            }))
+        },
+        options: {
+            maintainAspectRatio: false,
+            scales: {
+                x: Object.assign({}, scale, {
+                    stacked: true,
+                    ticks: Object.assign({}, scale.ticks, {
+                        callback(value) {
+                            return formatTimestamp(this.getLabelForValue(value), false);
+                        }
+                    })
+                }),
+                y: Object.assign({}, scale, { stacked: true, beginAtZero: true, title: { display: true, text: 'Requests', color: theme.text } })
+            },
+            plugins: {
+                legend: { labels: { color: theme.text } },
+                tooltip: {
+                    callbacks: {
+                        title(items) {
+                            return formatTimestamp(items[0].label);
+                        }
+                    }
+                }
+            },
+            onClick(event, elements) {
+                if (!elements.length) {
+                    return;
+                }
+                const label = responseCodeChart.data.datasets[elements[0].datasetIndex].label;
+                document.getElementById('filter-response-code').value = label.charAt(0);
+                document.getElementById('exact-code-container').classList.add('d-none');
+                currentPage = 1;
+                captureFilters();
+                loadData();
             }
-        })
-        .catch(error => console.error('Error loading request log data:', error));
+        }
+    });
 }
 
-// Populate widgets with data
-function populateWidgets(data) {
-    const slowRequests = document.getElementById('slow-requests');
-    slowRequests.innerHTML = data.slowRequests.map(r => {
-        const time = parseFloat(r.total_time) * 1000;
-        return `<li class="list-group-item d-flex justify-content-between align-items-center">
-            ${r.request_url}
-            <span class="badge bg-primary rounded-pill">${time.toFixed(3)} ms</span>
-        </li>`;
-    }).join('');
-
-    const slowRoutes = document.getElementById('slow-routes');
-    slowRoutes.innerHTML = data.slowRoutes.map(r => {
-        const time = parseFloat(r.avg_time) * 1000;
-        return `<li class="list-group-item d-flex justify-content-between align-items-center">
-            ${r.route_pattern}
-            <span class="badge bg-info rounded-pill">${time.toFixed(3)} ms</span>
-        </li>`;
-    }).join('');
-
-    document.getElementById('error-rate').textContent = `${(data.errorRate * 100).toFixed(2)}%`;
-
-    const longQueries = document.getElementById('long-queries');
-    longQueries.innerHTML = data.longQueries.map(q => {
-        const time = parseFloat(q.execution_time) * 1000;
-        const queryText = q.query.length > 50 ? q.query.substring(0, 50) + '...' : q.query;
-        return `<li class="list-group-item d-flex justify-content-between align-items-center">
-            ${queryText}
-            <span class="badge bg-warning rounded-pill">${time.toFixed(3)} ms</span>
-        </li>`;
-    }).join('');
-
-    const slowMiddleware = document.getElementById('slow-middleware');
-    slowMiddleware.innerHTML = data.slowMiddleware.map(m => {
-        const time = parseFloat(m.execution_time) * 1000;
-        return `<li class="list-group-item d-flex justify-content-between align-items-center">
-            ${m.middleware_name}
-            <span class="badge bg-primary rounded-pill">${time.toFixed(3)} ms</span>
-        </li>`;
-    }).join('');
-
-	const allRequestsCount = document.getElementById('all-requests-count');
-	allRequestsCount.textContent = data.allRequestsCount;
-
-    document.getElementById('cache-hit-rate').textContent = `${(data.cacheHitRate * 100).toFixed(2)}% Hits`;
-
-    document.getElementById('p95').textContent = (data.p95 * 1000).toFixed(3);
-    document.getElementById('p99').textContent = (data.p99 * 1000).toFixed(3);
-}
-
-// Pretty format JSON
 function formatJson(json) {
-    if (!json) return 'No data';
+    if (json === null || json === undefined || json === '') {
+        return 'No data';
+    }
     try {
-        // If it's already a string, parse it to ensure valid JSON
         const obj = typeof json === 'string' ? JSON.parse(json) : json;
         return JSON.stringify(obj, null, 2)
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
-            .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+            .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
                 let cls = 'json-number';
                 if (/^"/.test(match)) {
-                    if (/:$/.test(match)) {
-                        cls = 'json-key';
-                    } else {
-                        cls = 'json-string';
-                    }
+                    cls = /:$/.test(match) ? 'json-key' : 'json-string';
                 } else if (/true|false/.test(match)) {
                     cls = 'json-boolean';
                 } else if (/null/.test(match)) {
@@ -224,841 +588,292 @@ function formatJson(json) {
                 }
                 return '<span class="' + cls + '">' + match + '</span>';
             });
-    } catch (e) {
-        return String(json);
+    } catch (error) {
+        return escapeHtml(json);
     }
 }
 
-// Populate request log table with improved details
-function populateRequestLog(requests) {
-    const requestLog = document.getElementById('request-log');
-    requestLog.innerHTML = requests.map((r, index) => {
-        const time = parseFloat(r.total_time) * 1000;
-        
-        // Convert UTC timestamp to selected timezone
-        const formattedTimestamp = formatTimestamp(r.request_dt);
-        
-        // Build details sections conditionally
-        let detailSections = [];
-        
-        // Middleware section
-        if (r.middleware && r.middleware.length > 0) {
-            detailSections.push(`
-                <div class="mb-3">
-                    <h6 class="border-bottom pb-1">Middleware</h6>
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Execution Time</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${r.middleware.map(m => `
-                                    <tr>
-                                        <td>${m.middleware_name}</td>
-                                        <td>${(parseFloat(m.execution_time) * 1000).toFixed(3)} ms</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `);
-        }
-        
-        // Database Queries section
-        if (r.queries && r.queries.length > 0) {
-            detailSections.push(`
-                <div class="mb-3">
-                    <h6 class="border-bottom pb-1">Database Queries</h6>
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Query</th>
-                                    <th>Execution Time</th>
-                                    <th>Rows</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${r.queries.map(q => `
-                                    <tr>
-                                        <td><code>${q.query}</code></td>
-                                        <td>${(parseFloat(q.execution_time) * 1000).toFixed(3)} ms</td>
-                                        <td>${q.row_count}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `);
-        }
-        
-        // Errors section
-        if (r.errors && r.errors.length > 0) {
-            detailSections.push(`
-                <div class="mb-3">
-                    <h6 class="border-bottom pb-1 text-danger">Errors</h6>
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Error Message</th>
-                                    <th>Error Code</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${r.errors.map(e => `
-                                    <tr>
-                                        <td class="text-danger">${e.error_message}</td>
-                                        <td>${e.error_code}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `);
-        }
-        
-        // Cache Operations section
-        if (r.cache && r.cache.length > 0) {
-            detailSections.push(`
-                <div class="mb-3">
-                    <h6 class="border-bottom pb-1">Cache Operations</h6>
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Key</th>
-                                    <th>Result</th>
-                                    <th>Time</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${r.cache.map(c => `
-                                    <tr>
-                                        <td>${c.cache_key}</td>
-                                        <td>${c.hit ? '<span class="badge bg-success">Hit</span>' : '<span class="badge bg-warning">Miss</span>'}</td>
-                                        <td>${(parseFloat(c.execution_time) * 1000).toFixed(3)} ms</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `);
-        }
-        
-        // Custom Events section
-        if (r.custom_events && r.custom_events.length > 0) {
-            detailSections.push(`
-                <div class="mb-3">
-                    <h6 class="border-bottom pb-1">Custom Events</h6>
-                    <div class="accordion" id="customEventsAccordion-${index}">
-                        ${r.custom_events.map((event, eventIndex) => `
-                            <div class="accordion-item">
-                                <h2 class="accordion-header" id="event-heading-${index}-${eventIndex}">
-                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#event-collapse-${index}-${eventIndex}" aria-expanded="false" aria-controls="event-collapse-${index}-${eventIndex}">
-                                        <span class="badge bg-info me-2">${event.type}</span>
-                                        <small class="text-muted">${new Date(parseFloat(event.event_dt) * 1000).toISOString().split('T')[1].replace('Z', '')}</small>
-                                    </button>
-                                </h2>
-                                <div id="event-collapse-${index}-${eventIndex}" class="accordion-collapse collapse" aria-labelledby="event-heading-${index}-${eventIndex}" data-bs-parent="#customEventsAccordion-${index}">
-                                    <div class="accordion-body">
-                                        <pre class="json-formatter">${formatJson(event.data)}</pre>
-                                    </div>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `);
-        }
-
-        // If no details available
-        if (detailSections.length === 0) {
-            detailSections.push(`<div class="alert alert-info">No detailed information available for this request.</div>`);
-        }
-        
-        // Check if URL is long enough to need truncation
-        const urlTooLong = r.request_url.length > 40;
-        const urlCellClass = urlTooLong ? 'truncated-url' : '';
-        
-        // Format bot status with badge
-        const botStatus = r.is_bot == 1 ? 
-            '<span class="badge bg-warning">Yes</span>' : 
-            '<span class="badge bg-secondary">No</span>';
-        
-        // Create a complete copy of the request data for JSON display
-        const requestJson = { ...r };
-        
-        // Create a unique ID for the details row
-        const detailsRowId = `request-details-row-${index}`;
-        
-        // Return two table rows - one for the request data and one for details (initially hidden)
-        return `
-            <tr>
-                <td>${formattedTimestamp}</td>
-                <td class="${urlCellClass}" data-full-url="${r.request_url}">${r.request_url}</td>
-                <td>${time.toFixed(3)} ms</td>
-                <td>${r.response_code}</td>
-				<td>${r.ip}</td>
-                <td>${botStatus}</td>
-                <td>
-                    <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" 
-                            data-bs-target="#${detailsRowId}" aria-expanded="false" aria-controls="${detailsRowId}">
-                        Details
-                    </button>
-                </td>
-            </tr>
-            <tr class="details-row collapse" id="${detailsRowId}">
-                <td colspan="6">
-                    <div class="p-3">
-                        <div class="card card-body">
-                            <div class="row">
-                                <!-- JSON representation on the left -->
-                                <div class="col-md-7">
-                                    <h6 class="border-bottom pb-1">Raw Request Data</h6>
-                                    <div class="json-container" style="max-height: 500px; overflow-y: auto;">
-                                        <pre class="json-formatter">${formatJson(requestJson)}</pre>
-                                    </div>
-                                </div>
-                                
-                                <!-- Structured sections on the right -->
-                                <div class="col-md-5">
-                                    ${detailSections.join('')}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </td>
-            </tr>
-        `;
+function waterfall(items) {
+    const max = Math.max(1, ...items.map((item) => item.ms));
+    return items.map((item) => {
+        const width = Math.max(2, Math.round((item.ms / max) * 100));
+        return '<div class="mb-2"><div class="d-flex justify-content-between small"><span>'
+            + escapeHtml(item.label) + '</span><span>' + escapeHtml(item.ms.toFixed(1)) + ' ms</span></div>'
+            + '<div class="waterfall-track"><div class="waterfall-bar" style="width:' + width + '%"></div></div></div>';
     }).join('');
 }
 
-// Update pagination controls
-function updatePagination(pagination) {
-    currentPage = pagination.currentPage;
-    totalPages = pagination.totalPages;
-    perPage = pagination.perPage;
-
-    // Update pagination info
-    const start = (currentPage - 1) * perPage + 1;
-    const end = Math.min(currentPage * perPage, pagination.totalRequests);
-    
-    // Create the pagination info message
-    let paginationInfoText = `Showing ${start} to ${end} of ${pagination.totalRequests} requests`;
-    
-    // Add a note about the 500 limit if we're hitting it
-    if (pagination.totalRequests >= 500) {
-        paginationInfoText += ` <span class="text-warning" title="Only the most recent 500 matching requests are displayed. Use more specific filters to narrow your results."><i class="bi bi-info-circle"></i> (maximum limit - refine filters for more specific results)</span>`;
+function detailHtml(row) {
+    const bars = [];
+    (row.routes || []).forEach((item) => bars.push({ label: 'Route ' + item.route_pattern, ms: (Number(item.execution_time) || 0) * 1000 }));
+    (row.middleware || []).forEach((item) => bars.push({ label: item.middleware_name, ms: (Number(item.execution_time) || 0) * 1000 }));
+    (row.views || []).forEach((item) => bars.push({ label: 'View ' + item.view_file, ms: (Number(item.render_time) || 0) * 1000 }));
+    (row.queries || []).forEach((item) => bars.push({ label: item.query, ms: (Number(item.execution_time) || 0) * 1000 }));
+    let html = '';
+    if (bars.length) {
+        html += '<h6>Timing</h6>' + waterfall(bars);
     }
-    
-    document.getElementById('pagination-info').innerHTML = paginationInfoText;
-
-    // Update pagination buttons
-    const prevPage = document.getElementById('prev-page');
-    const nextPage = document.getElementById('next-page');
-    prevPage.classList.toggle('disabled', currentPage === 1);
-    nextPage.classList.toggle('disabled', currentPage === totalPages);
-
-    prevPage.onclick = () => {
-        if (currentPage > 1) {
-            currentPage--;
-            loadRequestLogData(); // Only reload request log data
-        }
-        return false;
-    };
-
-    nextPage.onclick = () => {
-        if (currentPage < totalPages) {
-            currentPage++;
-            loadRequestLogData(); // Only reload request log data
-        }
-        return false;
-    };
+    if ((row.db_connections || []).length) {
+        html += '<h6 class="mt-3">Database</h6><ul>' + row.db_connections.map((item) =>
+            '<li>' + escapeHtml(item.engine) + ' ' + escapeHtml(item.host) + ' / ' + escapeHtml(item.database_name) + '</li>'
+        ).join('') + '</ul>';
+    }
+    if ((row.queries || []).length) {
+        html += '<h6 class="mt-3">Queries</h6><div class="table-responsive"><table class="table table-sm"><tbody>'
+            + row.queries.map((item) => '<tr><td><code>' + escapeHtml(item.query) + '</code>'
+                + (item.params ? '<div class="small text-muted">' + escapeHtml(item.params) + '</div>' : '')
+                + '</td><td>' + escapeHtml(formatMs(item.execution_time)) + '</td><td>'
+                + escapeHtml(item.row_count) + ' rows</td></tr>').join('')
+            + '</tbody></table></div>';
+    }
+    if ((row.errors || []).length) {
+        html += '<h6 class="mt-3 text-danger">Errors</h6>' + row.errors.map((item) =>
+            '<div class="mb-2"><strong>' + escapeHtml(item.error_code) + '</strong> ' + escapeHtml(item.error_message)
+            + (item.error_trace ? '<pre class="trace-block mt-1">' + escapeHtml(item.error_trace) + '</pre>' : '')
+            + '</div>'
+        ).join('');
+    }
+    if ((row.cache || []).length) {
+        html += '<h6 class="mt-3">Cache</h6><ul>' + row.cache.map((item) =>
+            '<li>' + escapeHtml(item.cache_key) + ' ' + (Number(item.hit) === 1 ? 'hit' : 'miss')
+            + ' · ' + escapeHtml(formatMs(item.execution_time)) + '</li>'
+        ).join('') + '</ul>';
+    }
+    if ((row.custom_events || []).length) {
+        html += '<h6 class="mt-3">Custom events</h6>' + row.custom_events.map((item) =>
+            '<div class="mb-2"><span class="badge bg-info me-2">' + escapeHtml(item.type) + '</span>'
+            + '<small>' + escapeHtml(formatTimestamp(item.event_dt)) + '</small>'
+            + '<pre class="json-formatter">' + formatJson(item.data) + '</pre></div>'
+        ).join('');
+    }
+    if (!html) {
+        html = '<div class="text-muted">No detail rows for this request.</div>';
+    }
+    html += '<h6 class="mt-3">Raw</h6><pre class="json-formatter">' + formatJson(row) + '</pre>';
+    return html;
 }
 
-// Draw charts with data - renamed to drawLatencyChart and removed response code chart creation
-function drawLatencyChart(data) {
-    const MAX_X_AXIS_POINTS = 40; // Increased from 20 to show more granularity for day view
-    const currentRange = rangeSelector.value;
-    
-    // Sample data points to limit x-axis labels based on range
-    let chartData = data.chartData;
-    
-    // Apply sampling for longer time ranges
-    if ((currentRange === 'last_day' || currentRange === 'last_week') && chartData.length > MAX_X_AXIS_POINTS) {
-        // Calculate sampling interval
-        const samplingInterval = Math.ceil(chartData.length / MAX_X_AXIS_POINTS);
-        
-        // Sample the latency chart data
-        chartData = chartData.filter((_, index) => index % samplingInterval === 0);
-    }
-    
-    // Latency Chart
-    const ctxLatency = document.getElementById('latencyChart').getContext('2d');
-    if (latencyChart) latencyChart.destroy();
-    latencyChart = new Chart(ctxLatency, {
-        type: 'line',
-        data: {
-            labels: chartData.map(d => d.request_dt),
-            datasets: [{
-                label: 'Average Latency (ms)',
-                data: chartData.map(d => d.average_time * 1000),
-                borderColor: '#0d6efd',
-                backgroundColor: 'rgba(13, 110, 253, 0.1)',
-                fill: true,
-                tension: 0.4,
-            }]
-        },
-        options: {
-            scales: {
-                x: { 
-                    title: { display: true, text: 'Time' },
-                    ticks: {
-                        maxRotation: 45,
-                        minRotation: 45
-                    }
-                },
-                y: { 
-                    title: { display: true, text: 'Latency (ms)' }, 
-                    beginAtZero: true,
-                    suggestedMax: 1
-                }
-            },
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'top',
-                },
-                tooltip: {
-                    callbacks: {
-                        title: function(tooltipItems) {
-                            // Format the timestamp in the tooltip
-                            return formatTimestamp(tooltipItems[0].label);
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    // Remove the response code chart update
-    // updateResponseCodeChart(data.responseCodeOverTime); <- This line is removed
-}
-
-// New function to update just the response code chart
-function updateResponseCodeChart(responseData) {
-    const ctxResponse = document.getElementById('responseCodeChart').getContext('2d');
-    if (responseCodeChart) responseCodeChart.destroy();
-    
-    // If no data, show empty chart with message
-    if (!responseData || responseData.length === 0) {
-        responseCodeChart = new Chart(ctxResponse, {
-            type: 'bar',
-            data: {
-                datasets: []
-            },
-            options: {
-                maintainAspectRatio: false,
-                responsive: true,
-                plugins: {
-                    title: {
-                        display: true,
-                        text: 'No matching data for current filters',
-                        padding: {
-                            top: 30
-                        }
-                    }
-                }
-            }
-        });
+function populateRequestLog(requests) {
+    const body = document.getElementById('request-log');
+    if (!requests.length) {
+        body.innerHTML = '<tr><td colspan="9" class="text-muted">No requests match these filters.</td></tr>';
         return;
     }
-    
-    // Sample data points if too many
-    const MAX_X_AXIS_POINTS = 40; // Increased from 20 to show more granularity for day view
-    const currentRange = rangeSelector.value;
-    
-    if ((currentRange === 'last_day' || currentRange === 'last_week') && responseData.length > MAX_X_AXIS_POINTS) {
-        const samplingInterval = Math.ceil(responseData.length / MAX_X_AXIS_POINTS);
-        responseData = responseData.filter((_, index) => index % samplingInterval === 0);
-        console.log(`Sampling response data with interval ${samplingInterval}, showing ${responseData.length} points`);
+    body.innerHTML = requests.map((row, index) => {
+        const id = 'request-details-' + index;
+        const memory = formatBytes(row.peak_memory);
+        return '<tr>'
+            + '<td>' + escapeHtml(formatTimestamp(row.request_dt)) + '</td>'
+            + '<td>' + escapeHtml(row.request_method || '') + '</td>'
+            + '<td class="truncated-url" title="' + escapeHtml(row.request_url) + '">' + escapeHtml(row.request_url) + '</td>'
+            + '<td>' + statusBadge(row.response_code) + '</td>'
+            + '<td class="' + latencyClass((Number(row.total_time) || 0) * 1000) + '">' + escapeHtml(formatMs(row.total_time)) + '</td>'
+            + '<td>' + escapeHtml(memory) + '</td>'
+            + '<td>' + escapeHtml(row.host || '') + '</td>'
+            + '<td>' + (Number(row.is_bot) === 1 ? '<span class="badge bg-warning text-dark">Yes</span>' : '<span class="badge bg-secondary">No</span>') + '</td>'
+            + '<td><button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#' + id + '" data-request-id="' + escapeHtml(row.id) + '">Details</button></td>'
+            + '</tr><tr class="collapse details-row" id="' + id + '"><td colspan="9"><div class="p-3 detail-panel">Loading…</div></td></tr>';
+    }).join('');
+    body.querySelectorAll('button[data-request-id]').forEach((button) => {
+        button.addEventListener('click', () => loadDetails(button));
+    });
+}
+
+async function loadDetails(button) {
+    const row = document.querySelector(button.dataset.bsTarget);
+    const panel = row.querySelector('.detail-panel');
+    if (panel.dataset.loaded === '1') {
+        return;
     }
-
-    // Extract all unique response codes
-    const responseCodes = [...new Set(responseData.flatMap(d => Object.keys(d).filter(k => k !== 'request_dt')))];
-    
-    // Create datasets for each response code
-    const datasets = responseCodes.map(code => {
-        // Determine color based on response code
-        let color;
-        if (code >= 500 && code <= 599) {
-            color = '#dc3545'; // Red for 5xx errors
-        } else if (code >= 400 && code <= 499) {
-            color = '#ffc107'; // Yellow for 4xx errors
-        } else if (code >= 300 && code <= 399) {
-            color = '#0dcaf0'; // Cyan for 3xx redirects
-        } else {
-            color = '#198754'; // Green for 2xx success
+    panel.textContent = 'Loading…';
+    try {
+        const response = await fetch('/apm/data/requests/' + button.dataset.requestId);
+        if (!response.ok) {
+            throw new Error('Could not load this request.');
         }
+        const data = await response.json();
+        panel.innerHTML = detailHtml(data);
+        panel.dataset.loaded = '1';
+    } catch (error) {
+        panel.textContent = error.message;
+    }
+}
 
-        return {
-            label: `Code ${code}`,
-            data: responseData.map(d => d[code] || 0),
-            backgroundColor: color,
-            borderWidth: 1,
-        };
-    });
+function updatePagination(pagination) {
+    currentPage = pagination.currentPage || 1;
+    totalPages = pagination.totalPages || 1;
+    const total = pagination.totalRequests || 0;
+    document.getElementById('pagination-info').textContent = total
+        ? 'Page ' + currentPage + ' of ' + totalPages + ' · ' + total + ' requests'
+        : '';
+    document.getElementById('prev-page').classList.toggle('disabled', currentPage <= 1);
+    document.getElementById('next-page').classList.toggle('disabled', currentPage >= totalPages);
+}
 
-    responseCodeChart = new Chart(ctxResponse, {
-        type: 'bar',
-        data: {
-            labels: responseData.map(d => d.request_dt),
-            datasets: datasets
-        },
-        options: {
-            maintainAspectRatio: false,
-            responsive: true,
-            scales: {
-                x: { 
-                    title: { display: false },
-                    stacked: true,
-                    ticks: {
-                        display: false
-                    },
-                    grid: {
-                        display: false
-                    }
-                },
-                y: { 
-                    title: { display: true, text: 'Request Count' },
-                    beginAtZero: true,
-                    stacked: true,
-                }
-            },
-            plugins: {
-                legend: {
-                    display: false,
-                },
-                tooltip: {
-                    callbacks: {
-                        title: function(tooltipItems) {
-                            return formatTimestamp(tooltipItems[0].label);
-                        }
-                    }
-                }
+function renderActiveFilters() {
+    const wrap = document.getElementById('active-filters');
+    const list = document.getElementById('active-filters-list');
+    const entries = Object.entries(activeFilters);
+    wrap.classList.toggle('d-none', entries.length === 0);
+    list.innerHTML = '';
+    entries.forEach(([key, value]) => {
+        const badge = document.createElement('button');
+        badge.type = 'button';
+        badge.className = 'badge bg-info text-dark border-0 me-1';
+        const label = key === 'event_keys' ? 'event data' : key + ': ' + (typeof value === 'string' ? value : 'set');
+        badge.textContent = label + ' ×';
+        badge.addEventListener('click', () => {
+            delete activeFilters[key];
+            const field = {
+                url: 'filter-url',
+                request_id: 'filter-request-id',
+                is_bot: 'filter-bot',
+                min_time: 'filter-min-time',
+                route: 'filter-route',
+                ip: 'filter-ip',
+                host: 'filter-host',
+                session_id: 'filter-session-id',
+                user_agent: 'filter-user-agent',
+                custom_event_type: 'filter-custom-event',
+                error_message: 'filter-error',
+                response_code: 'filter-exact-code',
+                response_code_prefix: 'filter-response-code'
+            }[key];
+            if (field) {
+                document.getElementById(field).value = '';
             }
-        }
+            if (key === 'response_code' || key === 'response_code_prefix') {
+                document.getElementById('filter-response-code').value = '';
+            }
+            if (key === 'event_keys') {
+                document.getElementById('event-filters-container').innerHTML = '';
+            }
+            currentPage = 1;
+            captureFilters();
+            loadData();
+        });
+        list.appendChild(badge);
     });
 }
 
-// Debounce function
-function debounce(func, delay) {
-    return function() {
-        const context = this;
-        const args = arguments;
-        clearTimeout(searchDebounceTimer);
-        searchDebounceTimer = setTimeout(() => func.apply(context, args), delay);
-    };
+function addEventFilterRow(key = '', operator = 'exact', value = '') {
+    const template = document.getElementById('event-filter-template');
+    const row = template.content.firstElementChild.cloneNode(true);
+    const select = row.querySelector('.event-key-select');
+    availableEventKeys.forEach((eventKey) => {
+        const option = document.createElement('option');
+        option.value = eventKey;
+        option.textContent = eventKey;
+        select.appendChild(option);
+    });
+    select.value = key;
+    row.querySelector('.event-operator-select').value = operator;
+    row.querySelector('.event-value-input').value = value;
+    row.querySelector('.remove-event-filter').addEventListener('click', () => {
+        row.remove();
+        document.getElementById('no-event-filters-msg').classList.toggle(
+            'd-none',
+            document.querySelectorAll('.event-filter-row').length > 0
+        );
+    });
+    document.getElementById('event-filters-container').appendChild(row);
+    document.getElementById('no-event-filters-msg').classList.add('d-none');
 }
 
-// Event listeners
-rangeSelector.addEventListener('change', loadData);
+async function loadEventKeys() {
+    const response = await fetch('/apm/data/event-keys?' + queryParams().toString());
+    if (!response.ok) {
+        return;
+    }
+    const data = await response.json();
+    availableEventKeys = data.event_keys || [];
+    if (Array.isArray(activeFilters.event_keys)) {
+        activeFilters.event_keys.forEach((filter) => addEventFilterRow(filter.key, filter.operator, filter.value));
+    }
+}
 
-// Add event listener for timezone selector
+themeToggle.addEventListener('click', () => {
+    isDarkMode = !isDarkMode;
+    document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : '');
+    themeToggle.innerHTML = isDarkMode
+        ? '<i class="bi bi-sun"></i> Light mode'
+        : '<i class="bi bi-moon-stars"></i> Dark mode';
+    localStorage.setItem('darkMode', isDarkMode);
+    if (lastDashboard) {
+        drawCharts(lastDashboard);
+    }
+});
+
+rangeSelector.addEventListener('change', () => {
+    toggleCustomRange();
+    if (rangeSelector.value !== 'custom') {
+        currentPage = 1;
+        loadData();
+    }
+});
+rangeFrom.addEventListener('change', () => {
+    if (rangeSelector.value === 'custom') {
+        currentPage = 1;
+        loadData();
+    }
+});
+rangeUntil.addEventListener('change', () => {
+    if (rangeSelector.value === 'custom') {
+        currentPage = 1;
+        loadData();
+    }
+});
 timezoneSelector.addEventListener('change', () => {
     selectedTimezone = timezoneSelector.value;
     localStorage.setItem('selectedTimezone', selectedTimezone);
-    // Refresh only the request log data since it contains timestamps
-    loadRequestLogData();
-});
-
-// Setup filter functionality
-function setupFilterHandlers() {
-    const filterResponseCode = document.getElementById('filter-response-code');
-    const exactCodeContainer = document.getElementById('exact-code-container');
-    const filterExactCode = document.getElementById('filter-exact-code');
-    const applyFiltersBtn = document.getElementById('apply-filters');
-    const clearFiltersBtn = document.getElementById('clear-filters');
-    const activeFiltersContainer = document.getElementById('active-filters');
-    const activeFiltersList = document.getElementById('active-filters-list');
-    const addEventFilterBtn = document.getElementById('add-event-filter');
-    const eventFiltersContainer = document.getElementById('event-filters-container');
-    const noEventFiltersMsg = document.getElementById('no-event-filters-msg');
-    const eventFilterTemplate = document.getElementById('event-filter-template');
-    
-    // Store available keys for reuse
-    let availableEventKeys = [];
-    
-    // Define operators directly instead of loading them
-    const availableOperators = [
-        { id: 'exact', name: 'Equals', desc: 'Value exactly matches the text' },
-        { id: 'contains', name: 'Contains', desc: 'Value contains the text (case-insensitive)' },
-        { id: 'starts_with', name: 'Starts with', desc: 'Value starts with the text' },
-        { id: 'ends_with', name: 'Ends with', desc: 'Value ends with the text' },
-        { id: 'greater_than', name: '>', desc: 'Value is greater than (numeric comparison)' },
-        { id: 'less_than', name: '<', desc: 'Value is less than (numeric comparison)' },
-        { id: 'greater_than_equal', name: '>=', desc: 'Value is greater than or equal to (numeric comparison)' },
-        { id: 'less_than_equal', name: '<=', desc: 'Value is less than or equal to (numeric comparison)' }
-    ];
-    
-    // Load event keys for dropdowns
-    function loadEventKeys() {
-        const range = rangeSelector.value;
-        fetch(`/apm/data/event-keys?range=${range}`)
-            .then(response => {
-                if (!response.ok) throw new Error('Network response was not ok');
-                return response.json();
-            })
-            .then(data => {
-                availableEventKeys = data.event_keys || [];
-                updateEventKeyDropdowns();
-            })
-            .catch(error => console.error('Error loading event keys:', error));
-    }
-    
-    // Update all event key dropdowns with available options
-    function updateEventKeyDropdowns() {
-        document.querySelectorAll('.event-key-select').forEach(select => {
-            const currentValue = select.value;
-            
-            // Clear existing options except the first one
-            while (select.options.length > 1) {
-                select.remove(1);
-            }
-            
-            // Add options for each key
-            if (availableEventKeys.length) {
-                availableEventKeys.forEach(key => {
-                    const option = document.createElement('option');
-                    option.value = key;
-                    option.textContent = key;
-                    select.appendChild(option);
-                });
-            }
-            
-            // Restore previous value if it exists
-            if (currentValue && availableEventKeys.includes(currentValue)) {
-                select.value = currentValue;
-            }
-        });
-    }
-    
-    // Update all operator dropdowns (now uses hardcoded values)
-    function updateOperatorDropdowns() {
-        document.querySelectorAll('.event-operator-select').forEach(select => {
-            const currentValue = select.value || 'exact';
-            
-            // Clear existing options
-            select.innerHTML = '';
-            
-            // Add options for each operator
-            availableOperators.forEach(op => {
-                const option = document.createElement('option');
-                option.value = op.id;
-                option.textContent = op.name;
-                option.title = op.desc;
-                select.appendChild(option);
-            });
-            
-            // Restore previous value
-            select.value = currentValue;
-        });
-    }
-    
-    // Create a new event filter row
-    function addEventFilterRow(keyValue = '', operator = 'exact', valueValue = '') {
-        // Hide the "no filters" message
-        noEventFiltersMsg.style.display = 'none';
-
-        // Clone the template
-        const clone = document.importNode(eventFilterTemplate.content, true);
-        const row = clone.querySelector('.event-filter-row');
-
-        // Append to container first to ensure DOM is updated
-        eventFiltersContainer.appendChild(row);
-
-        // Populate dropdowns after appending to the DOM
-        updateEventKeyDropdowns();
-        updateOperatorDropdowns();
-
-        // Set initial values if provided
-        const keySelect = row.querySelector('.event-key-select');
-        const operatorSelect = row.querySelector('.event-operator-select');
-        const valueInput = row.querySelector('.event-value-input');
-
-        if (keyValue) keySelect.value = keyValue;
-        if (operator) operatorSelect.value = operator;
-        if (valueValue) valueInput.value = valueValue;
-
-        // Add remove handler
-        row.querySelector('.remove-event-filter').addEventListener('click', function() {
-            row.remove();
-
-            // Show message if no filters remain
-            if (eventFiltersContainer.querySelectorAll('.event-filter-row').length === 0) {
-                noEventFiltersMsg.style.display = 'block';
-            }
-        });
-
-        return row;
-    }
-    
-    // Add event filter button click
-    addEventFilterBtn.addEventListener('click', () => {
-        addEventFilterRow();
-    });
-    
-    // Initial load of event keys and populate operator dropdowns
-    loadEventKeys();
-    updateOperatorDropdowns();
-    
-    // Reload event keys when range changes
-    rangeSelector.addEventListener('change', loadEventKeys);
-    
-    // Show/hide exact code input based on selection
-    filterResponseCode.addEventListener('change', () => {
-        exactCodeContainer.style.display = 
-            filterResponseCode.value === 'exact' ? 'block' : 'none';
-    });
-    
-    // Apply filters button click
-    applyFiltersBtn.addEventListener('click', () => {
-        // Collect all filter values
-        const url = document.getElementById('filter-url').value.trim();
-        const responseCode = filterResponseCode.value;
-        const exactCode = filterExactCode.value.trim();
-        const requestId = document.getElementById('filter-request-id').value.trim();
-        const bot = document.getElementById('filter-bot').value;
-        const customEvent = document.getElementById('filter-custom-event').value.trim();
-        const minTime = document.getElementById('filter-min-time').value.trim();
-        
-        // New metadata filters
-        const ip = document.getElementById('filter-ip').value.trim();
-        const host = document.getElementById('filter-host').value.trim();
-        const sessionId = document.getElementById('filter-session-id').value.trim();
-        const userAgent = document.getElementById('filter-user-agent').value.trim();
-        
-        // Collect event filter data
-        const eventFilters = [];
-        document.querySelectorAll('.event-filter-row').forEach(row => {
-            const key = row.querySelector('.event-key-select').value;
-            const operator = row.querySelector('.event-operator-select').value;
-            const value = row.querySelector('.event-value-input').value.trim();
-            
-            if (key || value) {
-                eventFilters.push({ key, operator, value });
-            }
-        });
-        
-        // Clear previous filters
-        activeFilters = {};
-        
-        // Add non-empty filters to the activeFilters object
-        if (url) activeFilters.url = url;
-        if (requestId) activeFilters.request_id = requestId;
-        
-        if (responseCode === 'exact' && exactCode) {
-            activeFilters.response_code = exactCode;
-        } else if (responseCode && responseCode !== 'exact') {
-            activeFilters.response_code_prefix = responseCode;
-        }
-        
-        if (bot) activeFilters.is_bot = bot;
-        if (customEvent) activeFilters.custom_event_type = customEvent;
-        if (minTime) activeFilters.min_time = minTime;
-        
-        // Add new metadata filters
-        if (ip) activeFilters.ip = ip;
-        if (host) activeFilters.host = host;
-        if (sessionId) activeFilters.session_id = sessionId;
-        if (userAgent) activeFilters.user_agent = userAgent;
-        
-        // Add event filters if any exist
-        if (eventFilters.length > 0) {
-            activeFilters.event_keys = eventFilters;
-        }
-        
-        // Update UI to show active filters
-        updateActiveFiltersDisplay();
-        
-        // Reset to page 1 when applying new filters
-        currentPage = 1;
-        
-        // Load data with new filters
-        loadRequestLogData();
-    });
-    
-    // Clear filters button click
-    clearFiltersBtn.addEventListener('click', () => {
-        // Reset all filter inputs
-        document.getElementById('filter-url').value = '';
-        filterResponseCode.value = '';
-        filterExactCode.value = '';
-        document.getElementById('filter-request-id').value = '';
-        document.getElementById('filter-bot').value = '';
-        document.getElementById('filter-custom-event').value = '';
-        document.getElementById('filter-min-time').value = '';
-        
-        // Reset new metadata filters
-        document.getElementById('filter-ip').value = '';
-        document.getElementById('filter-host').value = '';
-        document.getElementById('filter-session-id').value = '';
-        document.getElementById('filter-user-agent').value = '';
-        
-        // Clear event filters
-        eventFiltersContainer.innerHTML = '';
-        noEventFiltersMsg.style.display = 'block';
-        
-        // Hide the exact code input
-        exactCodeContainer.style.display = 'none';
-        
-        // Clear active filters
-        activeFilters = {};
-        
-        // Update UI
-        updateActiveFiltersDisplay();
-        
-        // Reset to page 1
-        currentPage = 1;
-        
-        // Reload data
-        loadRequestLogData();
-    });
-    
-    // Function to update the active filters display
-    function updateActiveFiltersDisplay() {
-        if (Object.keys(activeFilters).length === 0) {
-            activeFiltersContainer.classList.add('d-none');
-            return;
-        }
-        
-        activeFiltersContainer.classList.remove('d-none');
-        activeFiltersList.innerHTML = '';
-        
-        // Create filter badges
-        Object.entries(activeFilters).forEach(([key, value]) => {
-            let filterLabel;
-            
-            switch (key) {
-                case 'url':
-                case 'request_id':
-                case 'response_code':
-                case 'custom_event_type':
-                case 'min_time':
-                case 'ip':
-                case 'host':
-                case 'session_id':
-                case 'user_agent':
-                    // ...existing code for these cases...
-                    break;
-                    
-                case 'event_keys':
-                    // For each event key filter, create a separate badge
-                    value.forEach((filter, index) => {
-                        const opDisplay = availableOperators.find(op => op.id === filter.operator)?.name || filter.operator;
-                        const filterKey = `event_keys_${index}`;
-                        const display = filter.key ? 
-                            `${filter.key} ${opDisplay} ${filter.value}` : 
-                            `Any Key ${opDisplay} ${filter.value}`;
-                            
-                        const badge = document.createElement('span');
-                        badge.className = 'badge bg-info me-2 mb-1';
-                        badge.innerHTML = `Event: ${display} <i class="bi bi-x-circle" data-filter-type="event_key" data-filter-index="${index}"></i>`;
-                        
-                        // Add click event to remove this specific event filter
-                        badge.querySelector('i').addEventListener('click', function() {
-                            const index = parseInt(this.dataset.filterIndex);
-                            activeFilters.event_keys.splice(index, 1);
-                            
-                            if (activeFilters.event_keys.length === 0) {
-                                delete activeFilters.event_keys;
-                            }
-                            
-                            updateActiveFiltersDisplay();
-                            currentPage = 1;
-                            loadRequestLogData();
-                        });
-                        
-                        activeFiltersList.appendChild(badge);
-                    });
-                    return; // Skip the default badge creation for this key
-                    
-                default:
-                    filterLabel = `${key}: ${value}`;
-            }
-            
-            if (filterLabel) { // Only create badge if we have a label
-                const badge = document.createElement('span');
-                badge.className = 'badge bg-info me-2 mb-1';
-                badge.innerHTML = `${filterLabel} <i class="bi bi-x-circle" data-filter="${key}"></i>`;
-                
-                // Add click event to remove individual filter
-                badge.querySelector('i').addEventListener('click', function() {
-                    delete activeFilters[this.dataset.filter];
-                    updateActiveFiltersDisplay();
-                    currentPage = 1;
-                    loadRequestLogData();
-                });
-                
-                activeFiltersList.appendChild(badge);
-            }
-        });
-    }
-    
-    // If we have event filters in active filters, recreate the UI for them
-    if (activeFilters.event_keys && Array.isArray(activeFilters.event_keys) && activeFilters.event_keys.length > 0) {
-        noEventFiltersMsg.style.display = 'none';
-        eventFiltersContainer.innerHTML = '';
-        
-        activeFilters.event_keys.forEach(filter => {
-            addEventFilterRow(filter.key, filter.operator, filter.value);
-        });
-    }
-}
-
-// Initialize dashboard on page load
-document.addEventListener('DOMContentLoaded', () => {
-    loadData();
-    setupFilterHandlers();
-    
-    // Add event listener for range selector to handle sequential chart updates
-    rangeSelector.addEventListener('change', () => {
-        // Clear the response code chart immediately to avoid confusion
-        if (responseCodeChart) {
-            responseCodeChart.destroy();
-            responseCodeChart = null;
-            
-            // Show loading state in chart
-            const ctxResponse = document.getElementById('responseCodeChart').getContext('2d');
-            responseCodeChart = new Chart(ctxResponse, {
-                type: 'bar',
-                data: { datasets: [] },
-                options: {
-                    maintainAspectRatio: false,
-                    responsive: true,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Loading data...',
-                            padding: { top: 30 }
-                        }
-                    }
-                }
-            });
-        }
-        
-        // Load new data
+    syncUrl();
+    if (lastDashboard) {
+        drawCharts(lastDashboard);
         loadData();
-    });
-    
-    // Remove the event listener we just added to avoid duplicates
-    rangeSelector.removeEventListener('change', loadData);
+    }
 });
+excludeBots.addEventListener('change', () => {
+    currentPage = 1;
+    loadData();
+});
+
+document.getElementById('filter-response-code').addEventListener('change', (event) => {
+    document.getElementById('exact-code-container').classList.toggle('d-none', event.target.value !== 'exact');
+});
+document.getElementById('apply-filters').addEventListener('click', () => {
+    currentPage = 1;
+    captureFilters();
+    loadData();
+});
+document.getElementById('clear-filters').addEventListener('click', () => {
+    ['filter-url', 'filter-request-id', 'filter-min-time', 'filter-route', 'filter-ip', 'filter-host', 'filter-session-id', 'filter-user-agent', 'filter-custom-event', 'filter-error', 'filter-exact-code'].forEach((id) => {
+        document.getElementById(id).value = '';
+    });
+    document.getElementById('filter-bot').value = '';
+    document.getElementById('filter-response-code').value = '';
+    document.getElementById('exact-code-container').classList.add('d-none');
+    document.getElementById('event-filters-container').innerHTML = '';
+    document.getElementById('no-event-filters-msg').classList.remove('d-none');
+    activeFilters = {};
+    currentPage = 1;
+    loadData();
+});
+document.getElementById('add-event-filter').addEventListener('click', () => addEventFilterRow());
+document.getElementById('prev-page').addEventListener('click', (event) => {
+    event.preventDefault();
+    if (currentPage > 1) {
+        currentPage -= 1;
+        loadData();
+    }
+});
+document.getElementById('next-page').addEventListener('click', (event) => {
+    event.preventDefault();
+    if (currentPage < totalPages) {
+        currentPage += 1;
+        loadData();
+    }
+});
+
+readUrl();
+loadEventKeys();
+loadData();
