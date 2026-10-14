@@ -74,6 +74,39 @@ FlightPHP APM currently supports the following databases for storing metrics:
 - **SQLite3**
 - **MySQL/MariaDB**
 
+## Upgrading a production server
+
+Index changes ship as new SQL files. They do not rewrite collected rows. The worker can stay up while they run. On a large MySQL or MariaDB database, the new indexes still take a lock-light but heavy read of `apm_requests`, so run the migrate during a quiet period.
+
+1. Back up the destination database. For SQLite, copy the destination file. For MySQL or MariaDB, `mysqldump` the APM schema.
+2. Deploy the new package (`composer update flightphp/apm`).
+3. From the application root, run:
+
+```bash
+php vendor/bin/runway apm:migrate
+```
+
+SQLite runs `src/apm/migration/sqlite/dest/0006-dest-indexes.sql`. MySQL and MariaDB run `src/apm/migration/mysql/dest/0002-dest-indexes.sql`. `apm:migrate` records filenames in the runway config and skips a file it has already applied. The same command is safe to run again.
+
+`request_dt` is stored in UTC. `apm:purge` now compares against a UTC cutoff. Check the kept window the first time you purge after upgrading if the server timezone is not UTC.
+
+The dashboard in this release adds latency and status charts, route and error filters, a custom time range, a hide-bots switch, and optional basic auth. Set `apm.dashboard_auth` when the dashboard is reachable beyond localhost:
+
+```json
+{
+  "apm": {
+    "dashboard_auth": {
+      "user": "apm",
+      "password": "change-me"
+    }
+  }
+}
+```
+
+Leave `user` or `password` empty to keep the dashboard open. The built-in PHP server is still a development server. Put a reverse proxy in front of it on a production host.
+
+Request IDs in `X-Flight-Request-Id` now match `request_token` on the stored row. Bot detection also marks LLM crawlers and metasearch agents such as GPTBot, ClaudeBot, PerplexityBot, and SearxNG.
+
 ## Documentation
 
 Want the full scoop? Check out the [FlightPHP APM Documentation](https://docs.flightphp.com/awesome-plugins/apm) for setup details, worker options, dashboard tricks, and more!

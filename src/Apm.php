@@ -81,7 +81,8 @@ class Apm
         $dispatcher = $app->eventDispatcher();
 
         $dispatcher->on('flight.request.received', function (Request $request) use ($app) {
-			// Generate request ID early and store it
+			// A new token for every request. Long-running workers must not reuse the last one.
+			unset($this->metrics['request_token']);
 			$requestToken = $this->generateRequestToken();
 			$this->metrics['request_token'] = $requestToken;
 
@@ -220,37 +221,56 @@ class Apm
 	public function isBot(string $userAgent): bool
 	{
 		// List of known bot user agents
+		// Substring match, case-insensitive. Google-Extended is a robots.txt token, not a User-Agent.
 		$botUserAgents = [
 			'Googlebot',
+			'GoogleOther',
 			'Bingbot',
 			'Slurp',
 			'DuckDuckBot',
+			'DuckAssistBot',
 			'Baiduspider',
 			'YandexBot',
 			'Sogou',
 			'Exabot',
 			'facebot',
 			'ia_archiver',
-			'AhrefsBot',
-			'Amazonbot',
-			'Anthropic-AI',
 			'Applebot',
-			'Bytespider',
-			'CCBot',
+			'GPTBot',
+			'OAI-SearchBot',
 			'ChatGPT-User',
+			'ClaudeBot',
 			'Claude-SearchBot',
 			'Claude-User',
-			'ClaudeBot',
-			'DotBot',
+			'Claude-Code',
+			'Anthropic-AI',
+			'PerplexityBot',
+			'Perplexity-User',
+			'CCBot',
+			'Bytespider',
+			'Amazonbot',
+			'meta-externalagent',
+			'meta-externalfetcher',
 			'FacebookBot',
 			'facebookexternalhit',
-			'GPTBot',
-			'meta-externalagent',
-			'MJ12bot',
-			'OAI-SearchBot',
-			'PerplexityBot',
+			'MistralAI-User',
+			'YouBot',
+			'cohere-ai',
+			'Diffbot',
 			'PetalBot',
-			'SemrushBot'
+			'ImagesiftBot',
+			'Timpibot',
+			'PhindBot',
+			'Ai2Bot',
+			'SearxNG',
+			'searx',
+			'AhrefsBot',
+			'SemrushBot',
+			'MJ12bot',
+			'DotBot',
+			'MojeekBot',
+			'Qwantify',
+			'SeznamBot',
 		];
 
 		foreach ($botUserAgents as $bot) {
@@ -263,13 +283,19 @@ class Apm
 	}
 
 	/**
-	 * Gets the current request ID.
-	 * 
-	 * @return string|null The request ID or null if not set.
+	 * Returns the request token for the current request, creating one on first use.
+	 *
+	 * The same value is stored on the metrics row and sent as X-Flight-Request-Id.
+	 *
+	 * @return string|null The request token.
 	 */
 	public function generateRequestToken(): ?string
 	{
-		return $this->metrics['request_token'] ?? null;
+		if (empty($this->metrics['request_token'])) {
+			$this->metrics['request_token'] = uniqid('req_', true);
+		}
+
+		return $this->metrics['request_token'];
 	}
 
 	/**

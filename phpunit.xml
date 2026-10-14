@@ -6,7 +6,7 @@
     </include>
   </coverage>
   <testsuites>
-    <testsuite name="ActiveRecord Tests">
+    <testsuite name="APM Tests">
       <directory>tests/</directory>
     </testsuite>
   </testsuites>

@@ -56,20 +56,20 @@ class ApmDashboardCommand extends Command
         $port = $this->port ?? $this->defaults['port'];
         $phpPath = escapeshellcmd($this->phpPath ?? 'php');
         $hostPort = escapeshellarg("{$host}:{$port}");
-        
+
         // Use the custom dashboard directory if provided, otherwise use the default
-        $dashboardPath = $this->dashboardDir ?? dirname(__DIR__, 2) . '/dashboard';
-        $dashboardPath = escapeshellarg($dashboardPath);
-        
-        if (!is_dir(trim($dashboardPath, "'"))) {
-            $io->error("Dashboard directory not found at: " . trim($dashboardPath, "'"));
+        $dashboardDir = $this->dashboardDir ?? dirname(__DIR__, 2) . '/dashboard';
+
+        if (!is_dir($dashboardDir)) {
+            $io->error("Dashboard directory not found at: {$dashboardDir}");
             return;
         }
 
         $io->bold("Starting APM dashboard server at http://{$host}:{$port}/apm/dashboard", true);
         $io->bold("Press Ctrl+C to stop the server", true);
-        
-        $command = "{$phpPath} -S {$hostPort} -t {$dashboardPath}";
+
+        // index.php is the router so /apm/dashboard reaches Flight. Real files still serve.
+        $command = "{$phpPath} -S {$hostPort} -t " . escapeshellarg($dashboardDir) . ' ' . escapeshellarg($dashboardDir . '/index.php');
         
         $io->green("Running: $command", true);
         
