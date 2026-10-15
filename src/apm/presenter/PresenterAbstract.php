@@ -123,6 +123,7 @@ abstract class PresenterAbstract
         $p95 = $this->percentileValue($where, $params, $totalRequests, 95);
         $p99 = $this->percentileValue($where, $params, $totalRequests, 99);
         $throughput = $this->throughputPerMinute($threshold, $filters, $totalRequests);
+        $customEvents = $this->customEventSummary($where, $params, $threshold, $filters, $interval);
 
         return [
             'slowRequests' => $slowRequests,
@@ -140,6 +141,7 @@ abstract class PresenterAbstract
             'averageLatency' => $averageLatency,
             'throughputPerMinute' => $throughput,
             'errorGroups' => $errorGroups,
+            'customEvents' => $customEvents,
         ];
     }
 
@@ -403,7 +405,7 @@ abstract class PresenterAbstract
             $params[] = $filters['request_id'];
         }
         if (!empty($filters['url'])) {
-            $where[] = "{$alias}.request_url LIKE ? ESCAPE '\\'";
+            $where[] = "{$alias}.request_url LIKE ? ESCAPE '!'";
             $params[] = '%' . $this->escapeLike((string) $filters['url']) . '%';
         }
         if (!empty($filters['response_code'])) {
@@ -434,7 +436,7 @@ abstract class PresenterAbstract
             $params[] = $filters['session_id'];
         }
         if (!empty($filters['user_agent'])) {
-            $where[] = "{$alias}.user_agent LIKE ? ESCAPE '\\'";
+            $where[] = "{$alias}.user_agent LIKE ? ESCAPE '!'";
             $params[] = '%' . $this->escapeLike((string) $filters['user_agent']) . '%';
         }
         if (!empty($filters['route_pattern'])) {
@@ -444,7 +446,7 @@ abstract class PresenterAbstract
         }
         if (!empty($filters['custom_event_type'])) {
             $where[] = "EXISTS (SELECT 1 FROM apm_custom_events event_filter
-                WHERE event_filter.request_id = {$alias}.id AND event_filter.event_type LIKE ? ESCAPE '\\')";
+                WHERE event_filter.request_id = {$alias}.id AND event_filter.event_type LIKE ? ESCAPE '!')";
             $params[] = '%' . $this->escapeLike((string) $filters['custom_event_type']) . '%';
         }
         if (!empty($filters['error_message'])) {
@@ -471,15 +473,15 @@ abstract class PresenterAbstract
             if ($value !== '') {
                 switch ($operator) {
                     case 'contains':
-                        $clauses[] = "data_filter.json_value LIKE ? ESCAPE '\\'";
+                        $clauses[] = "data_filter.json_value LIKE ? ESCAPE '!'";
                         $params[] = '%' . $this->escapeLike($value) . '%';
                         break;
                     case 'starts_with':
-                        $clauses[] = "data_filter.json_value LIKE ? ESCAPE '\\'";
+                        $clauses[] = "data_filter.json_value LIKE ? ESCAPE '!'";
                         $params[] = $this->escapeLike($value) . '%';
                         break;
                     case 'ends_with':
-                        $clauses[] = "data_filter.json_value LIKE ? ESCAPE '\\'";
+                        $clauses[] = "data_filter.json_value LIKE ? ESCAPE '!'";
                         $params[] = '%' . $this->escapeLike($value);
                         break;
                     case 'greater_than':
@@ -615,6 +617,68 @@ abstract class PresenterAbstract
         return ['latency' => $latency, 'classes' => $classes, 'exact' => $exact];
     }
 
+    /**
+     * Counts each custom event type in the request window, newest last_seen, and a per-bucket trend.
+     *
+     * @param array<int,mixed> $params
+     * @param array<string,mixed> $filters
+     * @return array<int,array{event_type:string,event_count:int,last_seen:string,trend:array<int,int>}>
+     */
+    protected function customEventSummary(
+        string $where,
+        array $params,
+        string $threshold,
+        array $filters,
+        int $interval
+    ): array {
+        $rows = $this->rowsToArrays($this->pdoWrapper->fetchAll(
+            "SELECT e.event_type AS event_type, COUNT(*) AS event_count, MAX(e.event_dt) AS last_seen
+            FROM apm_custom_events e
+            INNER JOIN apm_requests r ON r.id = e.request_id
+            WHERE {$where}
+            GROUP BY e.event_type
+            ORDER BY event_count DESC, e.event_type
+            LIMIT 20",
+            $params
+        ));
+        if ($rows === []) {
+            return [];
+        }
+
+        $bucket = $this->bucketSql();
+        $trendRows = $this->pdoWrapper->fetchAll(
+            "SELECT {$bucket} AS time_bucket, e.event_type AS event_type, COUNT(*) AS event_count
+            FROM apm_custom_events e
+            INNER JOIN apm_requests r ON r.id = e.request_id
+            WHERE {$where}
+            GROUP BY time_bucket, e.event_type",
+            array_merge([$interval, $interval], $params)
+        );
+        $byType = [];
+        foreach ($trendRows as $row) {
+            $byType[(string) $row['event_type']][(int) $row['time_bucket']] = (int) $row['event_count'];
+        }
+
+        $start = strtotime($threshold . ' UTC') ?: time();
+        $end = !empty($filters['until']) ? (strtotime((string) $filters['until'] . ' UTC') ?: time()) : time();
+        $start = $start - ($start % $interval);
+        $result = [];
+        foreach ($rows as $row) {
+            $type = (string) $row['event_type'];
+            $trend = [];
+            for ($cursor = $start; $cursor <= $end; $cursor += $interval) {
+                $trend[] = $byType[$type][$cursor] ?? 0;
+            }
+            $result[] = [
+                'event_type' => $type,
+                'event_count' => (int) $row['event_count'],
+                'last_seen' => (string) $row['last_seen'],
+                'trend' => $trend,
+            ];
+        }
+        return $result;
+    }
+
     protected function bucketSql(): string
     {
         $driver = (string) $this->pdoWrapper->getAttribute(PDO::ATTR_DRIVER_NAME);
@@ -725,7 +789,8 @@ abstract class PresenterAbstract
 
     protected function escapeLike(string $value): string
     {
-        return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value);
+        // '!' rather than a backslash: MySQL reads ESCAPE '\' as an unterminated string.
+        return str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $value);
     }
 
     /**
