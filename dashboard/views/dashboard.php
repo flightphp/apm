@@ -174,6 +174,12 @@
                     <ul class="list-group list-group-flush" id="error-groups"></ul>
                 </div>
             </div>
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">Custom events</div>
+                    <ul class="list-group list-group-flush" id="custom-events"></ul>
+                </div>
+            </div>
         </div>
 
         <div class="card">

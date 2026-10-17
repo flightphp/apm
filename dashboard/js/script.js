@@ -424,6 +424,34 @@ function populateDashboard(data) {
         });
         return button;
     }, 'No errors in this window.');
+    renderList('custom-events', data.customEvents, (row) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center gap-2';
+        button.innerHTML = '<span class="text-break">' + escapeHtml(row.event_type) + '</span>'
+            + '<span class="d-flex align-items-center gap-2">' + sparkline(row.trend || [])
+            + '<small class="text-muted">' + escapeHtml(formatTimestamp(row.last_seen)) + '</small>'
+            + '<span class="badge bg-secondary">' + escapeHtml(row.event_count) + '</span></span>';
+        button.addEventListener('click', () => {
+            document.getElementById('filter-custom-event').value = row.event_type || '';
+            currentPage = 1;
+            captureFilters();
+            loadData();
+        });
+        return button;
+    }, 'No custom events in this window.');
+}
+
+function sparkline(values) {
+    const width = 120;
+    const height = 24;
+    const max = Math.max(1, ...values.map(Number));
+    const step = values.length > 1 ? width / (values.length - 1) : width;
+    const points = values.map((value, index) => (index * step).toFixed(1) + ','
+        + (height - 1 - (Number(value) / max) * (height - 2)).toFixed(1)).join(' ');
+    return '<svg class="sparkline" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height
+        + '" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="1.5" points="' + points
+        + '"></polyline></svg>';
 }
 
 function itemHtml(label, badge) {
